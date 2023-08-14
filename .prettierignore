@@ -1,0 +1,12 @@
+node_modules
+package.json
+img
+.env
+coverage
+coverage.json
+.*
+README.md
+# Hardhat files
+cache
+artifacts
+
