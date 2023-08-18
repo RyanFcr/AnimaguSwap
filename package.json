@@ -28,5 +28,12 @@
     "ts-node": ">=8.0.0",
     "typechain": "^8.3.1",
     "typescript": ">=4.5.0"
-  }
+  },
+  "scripts": {
+    "deploy": "yarn hardhat run scripts/deploy.ts",
+    "generate": "yarn hardhat run scripts/generate.ts",
+    "communicate":"yarn hardhat run scripts/communicate.ts",
+    "commit": "yarn hardhat run scripts/commit.ts",
+    "reveal": "yarn hardhat run scripts/reveal.ts"
+}
 }
