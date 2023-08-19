@@ -10,7 +10,13 @@ interface IAnimaguSwap {
 
     function revealFlipper(bytes32 _b) external returns (bool);
 
-    function slashStaker() external payable returns (bool);
+    function slashStaker(
+        address maliciousAddress
+    ) external payable returns (bool);
 
-    function slashFlipper() external payable returns (bool);
+    function slashFlipper(
+        address maliciousAddress
+    ) external payable returns (bool);
+
+    function returnDeposit() external payable returns (bool);
 }

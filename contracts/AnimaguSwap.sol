@@ -13,7 +13,9 @@ contract AnimaguSwap is IAnimaguSwap {
     enum Status {
         Deposited,
         Committed,
-        Revealed
+        Revealed,
+        Slashed,
+        Returned
     }
     mapping(address => Status) public statuses;
 
@@ -21,12 +23,12 @@ contract AnimaguSwap is IAnimaguSwap {
 
     function deposit(uint256 _amount) external payable override returns (bool) {
         require(_amount > 0, "Invalid deposit amount");
+        // 将资金转移到合约
+        require(msg.value == _amount, "Sent value doesn't match the deposit");
 
         deposits[msg.sender] += _amount;
         statuses[msg.sender] = Status.Deposited;
 
-        // 将资金转移到合约
-        require(msg.value == _amount, "Sent value doesn't match the deposit");
         return true;
     }
 
@@ -51,6 +53,7 @@ contract AnimaguSwap is IAnimaguSwap {
         );
 
         // TODO: 添加验证逻辑，例如验证_merkleProof是否与之前提交的commit哈希匹配
+        // 还需要改
 
         statuses[msg.sender] = Status.Revealed;
         return true;
@@ -63,35 +66,63 @@ contract AnimaguSwap is IAnimaguSwap {
         );
 
         // TODO: 添加验证逻辑，例如验证_b是否与之前提交的commit哈希匹配
+        // 还需要改
 
         statuses[msg.sender] = Status.Revealed;
         return true;
     }
 
-    function slashStaker() external payable override returns (bool) {
+    function slashStaker(
+        address maliciousAddress
+    ) external payable override returns (bool) {
         require(
-            statuses[msg.sender] == Status.Committed,
-            "Invalid status for slashing"
+            statuses[maliciousAddress] == Status.Revealed,
+            "No deposit or already processed"
         );
 
-        // 惩罚逻辑
-        uint256 penalty = deposits[msg.sender] / 10; // 假设惩罚为10%的存款
-        deposits[msg.sender] -= penalty;
-        // 将惩罚的金额转移到另一个地址，例如flipper的地址
+        uint256 penaltyAmount = deposits[maliciousAddress];
+        require(penaltyAmount > 0, "No funds to slash");
+
+        deposits[maliciousAddress] = 0; // Reset the deposit to avoid re-entrancy attacks
+        statuses[maliciousAddress] = Status.Slashed;
+
+        payable(msg.sender).transfer(penaltyAmount); // Transfer the slashed funds to the caller
 
         return true;
     }
 
-    function slashFlipper() external payable override returns (bool) {
+    function slashFlipper(
+        address maliciousAddress
+    ) external payable override returns (bool) {
         require(
-            statuses[msg.sender] == Status.Committed,
-            "Invalid status for slashing"
+            statuses[maliciousAddress] == Status.Revealed,
+            "No deposit or already processed"
         );
 
-        // 惩罚逻辑
-        uint256 penalty = deposits[msg.sender] / 10; // 假设惩罚为10%的存款
-        deposits[msg.sender] -= penalty;
-        // 将惩罚的金额转移到另一个地址
+        uint256 penaltyAmount = deposits[maliciousAddress];
+        require(penaltyAmount > 0, "No funds to slash");
+
+        deposits[maliciousAddress] = 0; // Reset the deposit to avoid re-entrancy attacks
+        statuses[maliciousAddress] = Status.Slashed;
+
+        payable(msg.sender).transfer(penaltyAmount); // Transfer the slashed funds to the caller
+
+        return true;
+    }
+
+    function returnDeposit() external payable override returns (bool) {
+        require(
+            statuses[msg.sender] == Status.Revealed,
+            "No deposit or already processed"
+        );
+
+        uint256 amount = deposits[msg.sender];
+        require(amount > 0, "No funds to return");
+
+        deposits[msg.sender] = 0; // Reset the deposit to avoid re-entrancy attacks
+        statuses[msg.sender] = Status.Returned;
+
+        payable(msg.sender).transfer(amount);
 
         return true;
     }
