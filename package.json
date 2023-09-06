@@ -31,7 +31,7 @@
   },
   "scripts": {
     "deploy": "yarn hardhat run scripts/deploy.ts",
-    "generate": "yarn hardhat run scripts/generate.ts",
+    "generate": "yarn hardhat run scripts/generateAndDeposit.ts",
     "communicate":"yarn hardhat run scripts/communicate.ts",
     "commit": "yarn hardhat run scripts/commit.ts",
     "reveal": "yarn hardhat run scripts/reveal.ts"

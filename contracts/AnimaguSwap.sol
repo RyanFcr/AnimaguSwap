@@ -72,7 +72,7 @@ contract AnimaguSwap is IAnimaguSwap {
         return true;
     }
 
-    function slashStaker(
+    function slash(
         address maliciousAddress
     ) external payable override returns (bool) {
         require(
@@ -91,26 +91,7 @@ contract AnimaguSwap is IAnimaguSwap {
         return true;
     }
 
-    function slashFlipper(
-        address maliciousAddress
-    ) external payable override returns (bool) {
-        require(
-            statuses[maliciousAddress] == Status.Revealed,
-            "No deposit or already processed"
-        );
-
-        uint256 penaltyAmount = deposits[maliciousAddress];
-        require(penaltyAmount > 0, "No funds to slash");
-
-        deposits[maliciousAddress] = 0; // Reset the deposit to avoid re-entrancy attacks
-        statuses[maliciousAddress] = Status.Slashed;
-
-        payable(msg.sender).transfer(penaltyAmount); // Transfer the slashed funds to the caller
-
-        return true;
-    }
-
-    function returnDeposit() external payable override returns (bool) {
+    function withdraw() external payable override returns (bool) {
         require(
             statuses[msg.sender] == Status.Revealed,
             "No deposit or already processed"
