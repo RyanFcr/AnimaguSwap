@@ -15,7 +15,15 @@ const config: HardhatUserConfig = {
     defaultNetwork: "hardhat",
     solidity: "0.8.7",
     networks: {
-        hardhat: {},
+        hardhat: {
+            accounts: [
+                {
+                    privateKey:
+                        "0x7411afd59220b8040de5bad04c5af5b3d3538e3be6f711f80a994a6ca249619b",
+                    balance: "10000000000000000000000", // 10,000 ETH
+                },
+            ],
+        },
         sepolia: {
             url: SEPOLIA_RPC_URL,
             accounts: [PRIVATE_KEY],
