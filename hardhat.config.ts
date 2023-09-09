@@ -12,7 +12,7 @@ let PRIVATE_KEY = process.env.PRIVATE_KEY || ""
 let ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || ""
 
 const config: HardhatUserConfig = {
-    defaultNetwork: "hardhat",
+    defaultNetwork: "sepolia",
     solidity: "0.8.7",
     networks: {
         hardhat: {
