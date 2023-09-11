@@ -1,14 +1,14 @@
 import { ethers } from "hardhat"
 import * as fs from "fs"
+import * as path from "path"
 import { Contract } from "ethers"
+import { readFileSync } from "fs"
 
 function randomBit(): number {
     // Create a Uint8Array with a length of 1
     let arr = new Uint8Array(1)
-
     // Populate the array with random values
     crypto.getRandomValues(arr)
-
     // Return the least significant bit of the first element (i.e., 0 or 1)
     return arr[0] & 1
 }
@@ -27,6 +27,7 @@ async function main() {
     const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
     const Goerli_RPC_URL = process.env.GOERLI_RPC_URL || ""
     const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+
     const userWallet = new ethers.Wallet(userPrivateKey, provider)
 
     for (let i = 1; i <= N; i++) {
@@ -37,27 +38,24 @@ async function main() {
             console.error(`Private key for staker ${i} not found in .env file`)
             continue
         }
-
         const wallet = new ethers.Wallet(privateKey, provider)
         stakerWallets.push({
             address: wallet.address,
             privateKey: wallet.privateKey,
         })
-
-        // const amountToSend = ethers.parseEther("0.01") // 0.01 ETH in wei
-        // const tx = await userWallet.sendTransaction({
-        //     to: wallet.address,
-        //     value: amountToSend,
-        // })
-        // await tx.wait() // Wait for the transaction to be mined
-        // let balance = await provider.getBalance(wallet.address)
-        // console.log(
-        //     `Staker ${i} balance: ${parseFloat(
-        //         ethers.formatEther(balance),
-        //     ).toFixed(8)}`,
-        // )
+        const amountToSend = ethers.parseEther("0.01") // 0.01 ETH in wei
+        const tx = await userWallet.sendTransaction({
+            to: wallet.address,
+            value: amountToSend,
+        })
+        await tx.wait() // Wait for the transaction to be mined
+        let balance = await provider.getBalance(wallet.address)
+        console.log(
+            `Staker ${i} balance: ${parseFloat(
+                ethers.formatEther(balance),
+            ).toFixed(8)}`,
+        )
     }
-
     // console.log("userWallet:\n")
     // console.log(userWallet)
     // console.log("stakerWallets:\n")
@@ -227,8 +225,55 @@ async function main() {
     else if (random == 0) txh = sellTx
     else txh = buyTx
 
-    console.log(tx)
-    console.log(txh)
+    // console.log(tx)
+    // console.log(txh)
+
+    const contractArtifactPath = path.join(
+        __dirname,
+        "../artifacts/contracts/AnimaguSwap.sol/AnimaguSwap.json",
+    )
+    const contractArtifact = JSON.parse(
+        readFileSync(contractArtifactPath, "utf8"),
+    )
+    const ANIMAGUSWAP_ABI = contractArtifact.abi
+    const ANIMAGUSWAP_ADDRESS = fs
+        .readFileSync("./output/AnimaguSwapAddress.txt")
+        .toString() // 你应该从deploy脚本中动态获取这个地址。
+    const depositAmount = ethers.parseEther("0.01") // or the amount you want to deposit
+
+    for (let i = 1; i <= N; i++) {
+        const privateKey = process.env[`PRIVATE_KEY_${i}`]
+
+        if (!privateKey) {
+            console.error(`Private key for staker ${i} not found in .env file`)
+            continue
+        }
+
+        const stakerWallet = new ethers.Wallet(privateKey, provider)
+        const animaguSwapContract = new ethers.Contract(
+            ANIMAGUSWAP_ADDRESS,
+            ANIMAGUSWAP_ABI,
+            stakerWallet,
+        )
+
+        let balanceBefore = await provider.getBalance(stakerWallet.address)
+        console.log(
+            `Staker ${i} balance: ${parseFloat(
+                ethers.formatEther(balanceBefore),
+            ).toFixed(8)}`,
+        )
+        const depositTx = await animaguSwapContract.deposit(depositAmount, {
+            value: depositAmount,
+        })
+        await depositTx.wait()
+        console.log(`Deposited for staker ${stakerWallet.address}`)
+        let balanceAfter = await provider.getBalance(stakerWallet.address)
+        console.log(
+            `Staker ${i} balance: ${parseFloat(
+                ethers.formatEther(balanceAfter),
+            ).toFixed(8)}`,
+        )
+    }
 }
 
 main().catch((error) => {

@@ -26,9 +26,9 @@ contract AnimaguSwap is IAnimaguSwap {
         // 将资金转移到合约
         require(msg.value == _amount, "Sent value doesn't match the deposit");
 
-        deposits[msg.sender] += _amount;
         statuses[msg.sender] = Status.Deposited;
 
+        deposits[msg.sender] += _amount;
         return true;
     }
 

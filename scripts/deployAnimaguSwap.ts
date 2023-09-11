@@ -22,10 +22,6 @@ async function main() {
         path.resolve(outputFolderPath, "AnimaguSwapAddress.txt"),
         address,
     )
-    fs.writeFileSync(
-        path.resolve(outputFolderPath, "AnimaguSwapABI.json"),
-        JSON.stringify(AnimaguSwapFactory.interface.format(), null, 2),
-    )
 }
 const verify = async (contractAddress: string, args: any[]) => {
     console.log("Verifying contract...")
