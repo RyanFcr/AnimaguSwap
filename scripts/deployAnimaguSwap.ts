@@ -1,4 +1,6 @@
 import { ethers, run, network } from "hardhat"
+import * as fs from "fs"
+import * as path from "path"
 
 async function main() {
     const AnimaguSwapFactory = await ethers.getContractFactory("AnimaguSwap")
@@ -12,6 +14,18 @@ async function main() {
     //     await animaguSwap.deploymentTransaction
     //     await verify(address, [])
     // }
+    const outputFolderPath = path.resolve(__dirname, "../output")
+    if (!fs.existsSync(outputFolderPath)) {
+        fs.mkdirSync(outputFolderPath)
+    }
+    fs.writeFileSync(
+        path.resolve(outputFolderPath, "AnimaguSwapAddress.txt"),
+        address,
+    )
+    fs.writeFileSync(
+        path.resolve(outputFolderPath, "AnimaguSwapABI.json"),
+        JSON.stringify(AnimaguSwapFactory.interface.format(), null, 2),
+    )
 }
 const verify = async (contractAddress: string, args: any[]) => {
     console.log("Verifying contract...")
