@@ -5,11 +5,15 @@ import "@nomicfoundation/hardhat-toolbox"
 // import "@typechain/hardhat"
 
 // import ("@nomiclabs/hardhat-etherscan")
+import "@nomicfoundation/hardhat-verify"
 import "dotenv/config"
+import "hardhat-gas-reporter"
+import "@typechain/hardhat"
 
 let SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
 let PRIVATE_KEY = process.env.PRIVATE_KEY || ""
 let ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || ""
+let COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY || ""
 
 const config: HardhatUserConfig = {
     defaultNetwork: "sepolia",
@@ -32,6 +36,13 @@ const config: HardhatUserConfig = {
     },
     etherscan: {
         apiKey: ETHERSCAN_API_KEY,
+    },
+    gasReporter: {
+        enabled: true,
+        outputFile: "gas-report.txt",
+        noColors: true,
+        currency: "USD",
+        coinmarketcap: COINMARKETCAP_API_KEY,
     },
 }
 

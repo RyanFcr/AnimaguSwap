@@ -12,11 +12,11 @@
     "@nomicfoundation/hardhat-toolbox": "^3.0.0",
     "@nomicfoundation/hardhat-verify": "^1.1.1",
     "@nomiclabs/hardhat-etherscan": "^3.1.7",
-    "@typechain/ethers-v6": "^0.4.3",
-    "@typechain/hardhat": "^8.0.3",
-    "@types/chai": "^4.2.0",
-    "@types/mocha": ">=9.1.0",
-    "@types/node": ">=16.0.0",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "@types/chai": "^4.3.6",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.6.0",
     "chai": "^4.3.7",
     "dotenv": "^16.3.1",
     "ethers": "^6.7.0",
@@ -25,18 +25,16 @@
     "prettier": "^3.0.1",
     "prettier-plugin-solidity": "^1.1.3",
     "solidity-coverage": "^0.8.4",
-    "ts-node": ">=8.0.0",
+    "ts-node": "^10.9.1",
     "typechain": "^8.3.1",
-    "typescript": ">=4.5.0"
+    "typescript": "^5.2.2"
   },
   "scripts": {
-    "deploy": "yarn hardhat run scripts/deploy.ts",
+    "deploy": "yarn hardhat run  scripts/deployAnimaguSwap.ts --network sepolia",
     "generate": "yarn hardhat run scripts/generateAndDeposit.ts",
     "communicate": "yarn hardhat run scripts/communicate.ts",
     "commit": "yarn hardhat run scripts/commit.ts",
     "reveal": "yarn hardhat run scripts/reveal.ts"
   },
-  "dependencies": {
-    "@uniswap/sdk": "^3.0.3"
-  }
+  "dependencies": {}
 }
