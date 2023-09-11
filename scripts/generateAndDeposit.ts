@@ -3,6 +3,7 @@ import * as fs from "fs"
 import * as path from "path"
 import { Contract } from "ethers"
 import { readFileSync } from "fs"
+import { BUY, SELL } from "./uniswapAction"
 
 function randomBit(): number {
     // Create a Uint8Array with a length of 1
@@ -69,16 +70,7 @@ async function main() {
     //Uniswap-V2 router on goerli: 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 
     // Define Uniswap V2 router contract
-    const IUniswapV2Router02_ADDRESS =
-        "0x86dcd3293C53Cf8EFd7303B57beb2a3F671dDE98"
-    const IUniswapV2Router02_ABI = JSON.parse(
-        fs.readFileSync("./abis/router.json").toString(),
-    )
-    const IUniswapV2Router02 = new Contract(
-        IUniswapV2Router02_ADDRESS,
-        IUniswapV2Router02_ABI,
-        userWallet,
-    )
+
     //Sepolia DAI 0x64cE2F75c6887C77c61991bA2D6e456f9698adc3
     //Goerli DAI 0x5c221e77624690fff6dd741493d735a17716c26b
     // Uni 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
@@ -105,83 +97,6 @@ async function main() {
             8,
         )}`,
     )
-
-    async function approveForSwap(
-        tokenAddress: string,
-        amount: BigInt,
-        tokenABI: any,
-    ) {
-        const TokenContract = new ethers.Contract(
-            tokenAddress,
-            tokenABI,
-            userWallet,
-        )
-        const approvalTx = await TokenContract.approve(
-            IUniswapV2Router02_ADDRESS,
-            amount,
-        )
-        await approvalTx.wait()
-    }
-
-    async function BUY(
-        token1: string,
-        token2: string,
-        token2ABI: any,
-        amountOut: BigInt,
-        amountInMax: BigInt,
-        path: string[],
-        gasLimit: number,
-    ) {
-        await approveForSwap(token1, amountInMax, token2ABI)
-        // Calculate the minimum amount of tokens to accept (taking into account slippage)
-
-        // Generate a 10-minute deadline from the current time
-        const deadline = Math.floor(Date.now() / 1000) + 60 * 10
-
-        // Call swapExactTokensForTokens
-        const tx = await IUniswapV2Router02.swapTokensForExactTokens(
-            amountOut,
-            amountInMax,
-            path,
-            userWallet.address,
-            deadline,
-            {
-                gasLimit: gasLimit,
-            },
-        )
-
-        return tx
-    }
-
-    async function SELL(
-        token1: string,
-        token1ABI: any,
-        token2: string,
-        amountIn: BigInt,
-        amountOutMin: BigInt, // 最少期望得到的WETH数量
-        path: string[],
-        gasLimit: number,
-    ) {
-        await approveForSwap(token1, amountIn, token1ABI)
-        // Calculate the maximum amount of tokens to accept (taking into account slippage)
-
-        // Generate a 10-minute deadline from the current time
-        const deadline = Math.floor(Date.now() / 1000) + 60 * 10
-
-        // Call swapTokensForExactTokens
-        const tx = await IUniswapV2Router02.swapExactTokensForTokens(
-            amountIn,
-            amountOutMin,
-            path,
-            userWallet.address,
-            deadline,
-            {
-                gasLimit: gasLimit,
-            },
-        )
-
-        return tx
-    }
 
     let buyTx
     let sellTx
@@ -274,6 +189,7 @@ async function main() {
             ).toFixed(8)}`,
         )
     }
+    const v = randomBit()
 }
 
 main().catch((error) => {
