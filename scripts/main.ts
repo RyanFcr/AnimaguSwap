@@ -4,17 +4,11 @@ import * as path from "path"
 import { Contract } from "ethers"
 import { readFileSync } from "fs"
 import { BUY, SELL } from "./uniswapAction"
-
-function randomBit(): number {
-    // Create a Uint8Array with a length of 1
-    let arr = new Uint8Array(1)
-    // Populate the array with random values
-    crypto.getRandomValues(arr)
-    // Return the least significant bit of the first element (i.e., 0 or 1)
-    return arr[0] & 1
-}
+import { signedMessage, verifySignature } from "./signatureUtils"
+import { randomBit } from "./randomUtils"
 
 async function main() {
+    // stage1: generate wallets
     const stakerWallets: any[] = []
     const N = 2
 
@@ -156,6 +150,7 @@ async function main() {
         .toString() // 你应该从deploy脚本中动态获取这个地址。
     const depositAmount = ethers.parseEther("0.01") // or the amount you want to deposit
 
+    // stage1: deposit
     for (let i = 1; i <= N; i++) {
         const privateKey = process.env[`PRIVATE_KEY_${i}`]
 
@@ -189,7 +184,27 @@ async function main() {
             ).toFixed(8)}`,
         )
     }
-    const v = randomBit()
+    // stage2: communicate
+    const V = randomBit()
+    const flipperPrivateKey = process.env[`PRIVATE_KEY_${1}`]
+    if (!flipperPrivateKey) {
+        console.error(`Private key for staker ${1} not found in .env file`)
+        return
+    }
+    const flipperWallet = new ethers.Wallet(flipperPrivateKey, provider)
+    const message = (V | B).toString()
+
+    const signedMessageResult = await signedMessage(flipperWallet, message)
+    const verifySignatureResult = await verifySignature(
+        signedMessageResult,
+        message,
+        flipperWallet.address,
+    )
+    if (verifySignatureResult) {
+        console.log("Signature verified!")
+    } else {
+        console.log("Signature verification failed!")
+    }
 }
 
 main().catch((error) => {
