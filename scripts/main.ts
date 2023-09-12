@@ -3,6 +3,10 @@ import * as fs from "fs"
 import * as path from "path"
 import { Contract } from "ethers"
 import { readFileSync } from "fs"
+import * as secrets from "secrets.js-grempe"
+import { MerkleTree } from "merkletreejs"
+import { keccak256 } from "js-sha3"
+
 import { BUY, SELL } from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
 import { randomBit } from "./randomUtils"
@@ -22,7 +26,6 @@ async function main() {
     const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
     const Goerli_RPC_URL = process.env.GOERLI_RPC_URL || ""
     const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
-
     const userWallet = new ethers.Wallet(userPrivateKey, provider)
 
     for (let i = 1; i <= N; i++) {
@@ -95,7 +98,7 @@ async function main() {
     let buyTx
     let sellTx
     let tx
-    let txh
+    let txb
 
     const amountOut = ethers.parseUnits("10", 18) // 例如：希望得到10个UNI
     const amountInMax = ethers.parseUnits("0.1", 18) // 例如：最多愿意支付0.1个WETH
@@ -130,13 +133,15 @@ async function main() {
     if (random == 0) tx = buyTx
     else tx = sellTx
 
-    if (B == 0) txh = tx
-    else if (random == 0) txh = sellTx
-    else txh = buyTx
+    if (B == 0) txb = tx
+    else if (random == 0) txb = sellTx
+    else txb = buyTx
 
     // console.log(tx)
-    // console.log(txh)
+    // console.log(txb)
 
+    const txbAsString = JSON.stringify(txb)
+    console.log("txbAsString:", txbAsString)
     const contractArtifactPath = path.join(
         __dirname,
         "../artifacts/contracts/AnimaguSwap.sol/AnimaguSwap.json",
@@ -186,9 +191,9 @@ async function main() {
     }
     // stage2: communicate
     const V = randomBit()
-    const flipperPrivateKey = process.env[`PRIVATE_KEY_${1}`]
+    const flipperPrivateKey = process.env[`PRIVATE_KEY_${0}`]
     if (!flipperPrivateKey) {
-        console.error(`Private key for staker ${1} not found in .env file`)
+        console.error(`Private key for staker ${0} not found in .env file`)
         return
     }
     const flipperWallet = new ethers.Wallet(flipperPrivateKey, provider)
@@ -200,8 +205,26 @@ async function main() {
         message,
         flipperWallet.address,
     )
+
     if (verifySignatureResult) {
         console.log("Signature verified!")
+        // 分割 txb (assuming it's a string of the tx hash)
+        const shares = secrets.share(secrets.str2hex(txbAsString), N, N) // Splitting into N shares with N required to reconstruct
+        const encryptedShares = shares.map((share) => ethers.keccak256(share))
+        // 使用 shares 创建 Merkle 树
+        const tree = new MerkleTree(shares, keccak256, { sort: true })
+        const root = tree.getRoot().toString("hex")
+
+        // 为每个 staker 创建一个数组，其中包含他们的 share 和其对应的 Merkle proof
+        const stakerData = stakerWallets.map((staker, index) => {
+            const proof = tree.getHexProof(encryptedShares[index])
+            return {
+                stakerAddress: staker.address,
+                share: encryptedShares[index],
+                proof: proof,
+            }
+        })
+        console.log(stakerData)
     } else {
         console.log("Signature verification failed!")
     }

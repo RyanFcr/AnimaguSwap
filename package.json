@@ -31,7 +31,10 @@
   },
   "scripts": {
     "deploy": "yarn hardhat run  scripts/deployAnimaguSwap.ts --network sepolia",
-    "main":"yarn hardhat run scripts/main.ts --network sepolia"
+    "main": "yarn hardhat run scripts/main.ts --network sepolia"
   },
-  "dependencies": {}
+  "dependencies": {
+    "merkletreejs": "^0.3.10",
+    "secrets.js-grempe": "^2.0.0"
+  }
 }
