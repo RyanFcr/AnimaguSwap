@@ -210,21 +210,33 @@ async function main() {
         console.log("Signature verified!")
         // 分割 txb (assuming it's a string of the tx hash)
         const shares = secrets.share(secrets.str2hex(txbAsString), N, N) // Splitting into N shares with N required to reconstruct
-        const encryptedShares = shares.map((share) => ethers.keccak256(share))
+        // const encryptedShares = shares.map((share) => ethers.keccak256(share))
         // 使用 shares 创建 Merkle 树
         const tree = new MerkleTree(shares, keccak256, { sort: true })
         const root = tree.getRoot().toString("hex")
 
         // 为每个 staker 创建一个数组，其中包含他们的 share 和其对应的 Merkle proof
         const stakerData = stakerWallets.map((staker, index) => {
-            const proof = tree.getHexProof(encryptedShares[index])
+            const proof = tree.getHexProof(shares[index])
             return {
                 stakerAddress: staker.address,
-                share: encryptedShares[index],
+                share: shares[index],
                 proof: proof,
             }
         })
         console.log(stakerData)
+        for (let index = 0; index < N; index++) {
+            const isValidProof = tree.verify(
+                stakerData[index].proof, // proof for the encryptedShare
+                stakerData[index].share, // the encryptedShare itself
+                root, // the root of the Merkle Tree
+            )
+
+            console.log(
+                `Proof for staker ${index} is`,
+                isValidProof ? "valid" : "invalid",
+            )
+        }
     } else {
         console.log("Signature verification failed!")
     }
