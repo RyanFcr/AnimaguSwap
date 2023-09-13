@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import {IAnimaguSwap} from "./IAnimaguSwap.sol";
-// import "@openzeppelin/contracts/cryptography/MerkleProof.sol";
-import "./MerkleProof.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+// import "./MerkleProof.sol";
 pragma solidity ^0.8.20;
 
 contract AnimaguSwap is IAnimaguSwap {

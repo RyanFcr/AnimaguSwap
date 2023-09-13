@@ -8,7 +8,7 @@ import { keccak256 } from "js-sha3"
 import { BUY, SELL } from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
 import { randomBit } from "./randomUtils"
-
+import { encodeWithoutPrefix } from "./utils"
 async function main() {
     // stage1: generate wallets
     const stakerWallets: any[] = []
@@ -211,17 +211,23 @@ async function main() {
         console.log("Signature verified!")
         // 分割 txb (assuming it's a string of the tx hash)
         const shares = secrets.share(secrets.str2hex(txbAsString), N, N) // Splitting into N shares with N required to reconstruct
-        // const encryptedShares = shares.map((share) => ethers.keccak256(share))
-        // 使用 shares 创建 Merkle 树
-        const tree = new MerkleTree(shares, keccak256, { sort: true })
+        // 在每个share前加上“0x”
+        const prefixedShares = shares.map((share) => "0x" + share)
+
+        // 使用 prefixedShares 创建 Merkle 树
+        const hashedShares = prefixedShares.map((share) =>
+            ethers.keccak256(ethers.toUtf8Bytes(share)),
+        )
+        console.log("hashedShares:", hashedShares)
+        const tree = new MerkleTree(hashedShares, keccak256, { sort: true })
         const root = tree.getRoot().toString("hex")
 
         // 为每个 staker 创建一个数组，其中包含他们的 share 和其对应的 Merkle proof
         const stakerData = stakerWallets.map((staker, index) => {
-            const proof = tree.getHexProof(shares[index])
+            const proof = tree.getHexProof(hashedShares[index])
             return {
                 stakerAddress: staker.address,
-                share: shares[index],
+                share: hashedShares[index],
                 proof: proof,
             }
         })
@@ -274,11 +280,10 @@ async function main() {
                     ANIMAGUSWAP_ABI,
                     stakerWallet,
                 )
-                let shareBytes32 = ethers.encodeBytes32String(
-                    stakerData[index].share,
-                )
+                console.log(stakerData[index].share.length)
+                let shareBytes32 = encodeWithoutPrefix(stakerData[index].share)
                 let proofBytes32 = stakerData[index].proof.map((proof) =>
-                    ethers.encodeBytes32String(proof),
+                    encodeWithoutPrefix(proof),
                 )
                 // Assuming the revealStaker function accepts the hashed root as its only argument
                 const stakerRevealTx = await stakerContract.revealStaker(
