@@ -1,110 +1,84 @@
 // SPDX-License-Identifier: MIT
 import {IAnimaguSwap} from "./IAnimaguSwap.sol";
-pragma solidity ^0.8.0;
+// import "@openzeppelin/contracts/cryptography/MerkleProof.sol";
+import "./MerkleProof.sol";
+pragma solidity ^0.8.20;
 
 contract AnimaguSwap is IAnimaguSwap {
     // 记录质押的资金
+    using MerkleProof for bytes32[];
     mapping(address => uint256) public deposits;
 
     // 记录每个参与者的commit哈希值
-    mapping(address => bytes32) public commits;
+    bytes32 public _commitTx;
+    bytes32 public _commitB;
+    address public user;
+    address public flipper;
+    bool public userCommitted = false; // 标记user是否commit了
 
-    // 内部状态
-    enum Status {
-        Deposited,
-        Committed,
-        Revealed,
-        Slashed,
-        Returned
+    constructor(address _user, address _flipper) {
+        user = _user;
+        flipper = _flipper;
     }
-    mapping(address => Status) public statuses;
-
-    constructor() {}
 
     function deposit(uint256 _amount) external payable override returns (bool) {
         require(_amount > 0, "Invalid deposit amount");
         // 将资金转移到合约
         require(msg.value == _amount, "Sent value doesn't match the deposit");
 
-        statuses[msg.sender] = Status.Deposited;
-
         deposits[msg.sender] += _amount;
         return true;
     }
 
-    function commit(bytes32 _hash) external override returns (bool) {
-        require(
-            statuses[msg.sender] == Status.Deposited,
-            "Invalid status for commit"
-        );
+    function commit(
+        bytes32 hashTx,
+        bytes32 hashB
+    ) external override returns (bool) {
+        require(msg.sender == user, "Only user can commit");
 
-        commits[msg.sender] = _hash;
-        statuses[msg.sender] = Status.Committed;
-
+        _commitTx = hashTx;
+        _commitB = hashB;
+        userCommitted = true;
         return true;
     }
 
     function revealStaker(
-        bytes[] calldata _txs
-    ) external override returns (bool) {
-        require(
-            statuses[msg.sender] == Status.Committed,
-            "Invalid status for reveal"
-        );
-
-        // TODO: 添加验证逻辑，例如验证_merkleProof是否与之前提交的commit哈希匹配
-        // 还需要改
-
-        statuses[msg.sender] = Status.Revealed;
-        return true;
-    }
-
-    function revealFlipper(bytes32 _b) external override returns (bool) {
-        require(
-            statuses[msg.sender] == Status.Committed,
-            "Invalid status for reveal"
-        );
-
-        // TODO: 添加验证逻辑，例如验证_b是否与之前提交的commit哈希匹配
-        // 还需要改
-
-        statuses[msg.sender] = Status.Revealed;
-        return true;
-    }
-
-    function slash(
-        address maliciousAddress
+        bytes32 share,
+        bytes32[] memory proof
     ) external payable override returns (bool) {
+        require(userCommitted, "User has not committed yet");
         require(
-            statuses[maliciousAddress] == Status.Revealed,
-            "No deposit or already processed"
+            deposits[msg.sender] > 0,
+            "Only stakers with deposits can reveal"
         );
 
-        uint256 penaltyAmount = deposits[maliciousAddress];
-        require(penaltyAmount > 0, "No funds to slash");
+        // 使用MerkleProof库的verify函数验证
+        bool isValidProof = MerkleProof.verify(proof, _commitTx, share);
 
-        deposits[maliciousAddress] = 0; // Reset the deposit to avoid re-entrancy attacks
-        statuses[maliciousAddress] = Status.Slashed;
-
-        payable(msg.sender).transfer(penaltyAmount); // Transfer the slashed funds to the caller
-
+        if (isValidProof) {
+            payable(msg.sender).transfer(deposits[msg.sender]);
+            deposits[msg.sender] = 0;
+        } else {
+            deposits[msg.sender] = 0; // Burn the deposit
+        }
         return true;
     }
 
-    function withdraw() external payable override returns (bool) {
+    function revealFlipper(
+        bytes32 _hash
+    ) external payable override returns (bool) {
+        require(userCommitted, "User has not committed yet");
+        require(msg.sender == flipper, "Only flipper can reveal");
         require(
-            statuses[msg.sender] == Status.Revealed,
-            "No deposit or already processed"
+            deposits[msg.sender] > 0,
+            "Only flipper with deposit can reveal"
         );
-
-        uint256 amount = deposits[msg.sender];
-        require(amount > 0, "No funds to return");
-
-        deposits[msg.sender] = 0; // Reset the deposit to avoid re-entrancy attacks
-        statuses[msg.sender] = Status.Returned;
-
-        payable(msg.sender).transfer(amount);
-
+        if (_hash == _commitB) {
+            payable(msg.sender).transfer(deposits[msg.sender]);
+            deposits[msg.sender] = 0;
+        } else {
+            deposits[msg.sender] = 0; // Burn the deposit
+        }
         return true;
     }
 }

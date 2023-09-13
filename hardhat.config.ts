@@ -17,7 +17,7 @@ let COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY || ""
 
 const config: HardhatUserConfig = {
     defaultNetwork: "sepolia",
-    solidity: "0.8.7",
+    solidity: "0.8.20",
     networks: {
         hardhat: {
             accounts: [

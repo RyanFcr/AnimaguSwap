@@ -1,11 +1,23 @@
 import { ethers, run, network } from "hardhat"
 import * as fs from "fs"
 import * as path from "path"
-
+import { getWallets } from "./getWallet"
 async function main() {
+    const wallets = await getWallets()
+
+    if (!wallets) {
+        console.error("Unable to retrieve wallets.")
+        return // 或者 throw new Error("Unable to retrieve wallets.")
+    }
+
+    const { userWallet, flipperWallet } = wallets
+
     const AnimaguSwapFactory = await ethers.getContractFactory("AnimaguSwap")
     console.log("Deploying AnimaguSwap...")
-    const animaguSwap = await AnimaguSwapFactory.deploy()
+    const animaguSwap = await AnimaguSwapFactory.deploy(
+        userWallet.address,
+        flipperWallet.address,
+    )
     const address = await animaguSwap.getAddress()
     console.log("AnimaguSwap deployed to:", address)
     // if (network.config.chainId === 11155111 && process.env.ETHERSCAN_API_KEY) {

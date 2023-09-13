@@ -1,12 +1,10 @@
 import { ethers } from "hardhat"
 import * as fs from "fs"
 import * as path from "path"
-import { Contract } from "ethers"
 import { readFileSync } from "fs"
 import * as secrets from "secrets.js-grempe"
 import { MerkleTree } from "merkletreejs"
 import { keccak256 } from "js-sha3"
-
 import { BUY, SELL } from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
 import { randomBit } from "./randomUtils"
@@ -14,8 +12,7 @@ import { randomBit } from "./randomUtils"
 async function main() {
     // stage1: generate wallets
     const stakerWallets: any[] = []
-    const N = 2
-
+    const N = 2 // N is the number of stakers
     const userPrivateKey = process.env.PRIVATE_KEY
 
     if (!userPrivateKey) {
@@ -24,11 +21,18 @@ async function main() {
     }
 
     const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
-    const Goerli_RPC_URL = process.env.GOERLI_RPC_URL || ""
     const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
     const userWallet = new ethers.Wallet(userPrivateKey, provider)
 
-    for (let i = 1; i <= N; i++) {
+    const flipperPrivateKey = process.env[`PRIVATE_KEY_${0}`]
+    if (!flipperPrivateKey) {
+        console.error(`Private key for staker ${0} not found in .env file`)
+        return
+    }
+    const flipperWallet = new ethers.Wallet(flipperPrivateKey, provider)
+    // 0 is the flipper
+    // 1, 2, 3, ... are the stakers
+    for (let i = 0; i <= N; i++) {
         // N is the number of stakers
         const privateKey = process.env[`PRIVATE_KEY_${i}`]
 
@@ -37,10 +41,13 @@ async function main() {
             continue
         }
         const wallet = new ethers.Wallet(privateKey, provider)
-        stakerWallets.push({
-            address: wallet.address,
-            privateKey: wallet.privateKey,
-        })
+        // 0 is the flipper
+        if (i > 0) {
+            stakerWallets.push({
+                address: wallet.address,
+                privateKey: wallet.privateKey,
+            })
+        }
         const amountToSend = ethers.parseEther("0.01") // 0.01 ETH in wei
         const tx = await userWallet.sendTransaction({
             to: wallet.address,
@@ -156,7 +163,7 @@ async function main() {
     const depositAmount = ethers.parseEther("0.01") // or the amount you want to deposit
 
     // stage1: deposit
-    for (let i = 1; i <= N; i++) {
+    for (let i = 0; i <= N; i++) {
         const privateKey = process.env[`PRIVATE_KEY_${i}`]
 
         if (!privateKey) {
@@ -191,12 +198,6 @@ async function main() {
     }
     // stage2: communicate
     const V = randomBit()
-    const flipperPrivateKey = process.env[`PRIVATE_KEY_${0}`]
-    if (!flipperPrivateKey) {
-        console.error(`Private key for staker ${0} not found in .env file`)
-        return
-    }
-    const flipperWallet = new ethers.Wallet(flipperPrivateKey, provider)
     const message = (V | B).toString()
 
     const signedMessageResult = await signedMessage(flipperWallet, message)
@@ -225,6 +226,26 @@ async function main() {
             }
         })
         console.log(stakerData)
+        const animaguSwapContractWithUserWallet = new ethers.Contract(
+            ANIMAGUSWAP_ADDRESS,
+            ANIMAGUSWAP_ABI,
+            userWallet,
+        )
+
+        // 计算 (B|V) 和 Merkle root 的哈希
+        const hashedBV = ethers.keccak256(
+            ethers.toUtf8Bytes((B | V).toString()),
+        )
+        const hashedMerkleRoot = ethers.keccak256(ethers.toUtf8Bytes(root))
+
+        // 调用commit函数
+        const commitTx = await animaguSwapContractWithUserWallet.commit(
+            hashedBV,
+            hashedMerkleRoot,
+        )
+        await commitTx.wait()
+
+        console.log("Commit transaction sent and mined.")
         for (let index = 0; index < N; index++) {
             const isValidProof = tree.verify(
                 stakerData[index].proof, // proof for the encryptedShare
@@ -236,7 +257,49 @@ async function main() {
                 `Proof for staker ${index} is`,
                 isValidProof ? "valid" : "invalid",
             )
+            // user didn't cheat
+            if (isValidProof) {
+                const privateKey = process.env[`PRIVATE_KEY_${index + 1}`]
+                if (!privateKey) {
+                    console.error(
+                        `Private key for staker ${
+                            index + 1
+                        } not found in .env file`,
+                    )
+                    continue
+                }
+                const stakerWallet = new ethers.Wallet(privateKey, provider)
+                const stakerContract = new ethers.Contract(
+                    ANIMAGUSWAP_ADDRESS,
+                    ANIMAGUSWAP_ABI,
+                    stakerWallet,
+                )
+                let shareBytes32 = ethers.encodeBytes32String(
+                    stakerData[index].share,
+                )
+                let proofBytes32 = stakerData[index].proof.map((proof) =>
+                    ethers.encodeBytes32String(proof),
+                )
+                // Assuming the revealStaker function accepts the hashed root as its only argument
+                const stakerRevealTx = await stakerContract.revealStaker(
+                    shareBytes32,
+                    proofBytes32,
+                )
+                await stakerRevealTx.wait()
+            }
         }
+        const flipperContract = new ethers.Contract(
+            ANIMAGUSWAP_ADDRESS,
+            ANIMAGUSWAP_ABI,
+            flipperWallet,
+        )
+        const flipperHashedBV = ethers.keccak256(ethers.toUtf8Bytes(message))
+
+        const flipperRevealTx = await flipperContract.revealFlipper(
+            flipperHashedBV,
+        )
+        await flipperRevealTx.wait()
+        console.log("Flipper revealed with B|V hash:", hashedBV)
     } else {
         console.log("Signature verification failed!")
     }
