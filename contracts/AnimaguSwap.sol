@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 import {IAnimaguSwap} from "./IAnimaguSwap.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-// import "./MerkleProof.sol";
-pragma solidity ^0.8.20;
 
 contract AnimaguSwap is IAnimaguSwap {
+    event StakerRevealed(address indexed staker, bool success);
+    event FlipperRevealed(address indexed flipper, bool success);
+
     // 记录质押的资金
     using MerkleProof for bytes32[];
     mapping(address => uint256) public deposits;
@@ -16,6 +18,7 @@ contract AnimaguSwap is IAnimaguSwap {
     address public flipper;
     bool public userCommitted = false; // 标记user是否commit了
 
+    // 合约不应该知道谁是user
     constructor(address _user, address _flipper) {
         user = _user;
         flipper = _flipper;
@@ -58,8 +61,10 @@ contract AnimaguSwap is IAnimaguSwap {
         if (isValidProof) {
             payable(msg.sender).transfer(deposits[msg.sender]);
             deposits[msg.sender] = 0;
+            emit StakerRevealed(msg.sender, true);
         } else {
             deposits[msg.sender] = 0; // Burn the deposit
+            emit StakerRevealed(msg.sender, false);
         }
         return true;
     }
@@ -76,8 +81,10 @@ contract AnimaguSwap is IAnimaguSwap {
         if (_hash == _commitB) {
             payable(msg.sender).transfer(deposits[msg.sender]);
             deposits[msg.sender] = 0;
+            emit FlipperRevealed(msg.sender, true);
         } else {
             deposits[msg.sender] = 0; // Burn the deposit
+            emit FlipperRevealed(msg.sender, false);
         }
         return true;
     }

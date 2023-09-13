@@ -243,14 +243,26 @@ async function main() {
         )
         const hashedMerkleRoot = ethers.keccak256(ethers.toUtf8Bytes(root))
 
+        console.log("hashedBV:", hashedBV)
+        console.log("hashedMerkleRoot:", hashedMerkleRoot)
         // 调用commit函数
         const commitTx = await animaguSwapContractWithUserWallet.commit(
-            hashedBV,
             hashedMerkleRoot,
+            hashedBV,
         )
         await commitTx.wait()
 
         console.log("Commit transaction sent and mined.")
+        const stakerContractInstance = new ethers.Contract(
+            ANIMAGUSWAP_ADDRESS,
+            ANIMAGUSWAP_ABI,
+            provider, // 使用全局provider
+        )
+        stakerContractInstance.on("StakerRevealed", (staker, success) => {
+            console.log(
+                `Staker ${staker} reveal ${success ? "successful" : "failed"}`,
+            )
+        })
         for (let index = 0; index < N; index++) {
             const isValidProof = tree.verify(
                 stakerData[index].proof, // proof for the encryptedShare
@@ -279,16 +291,34 @@ async function main() {
                     ANIMAGUSWAP_ABI,
                     stakerWallet,
                 )
-                console.log(stakerData[index].share.length)
+                // const stakerRevealedListener = (staker: any, success: any) => {
+                //     console.log(
+                //         `Staker ${staker} reveal ${
+                //             success ? "successful" : "failed"
+                //         }`,
+                //     )
+                //     // Remove listener after getting the event
+                //     stakerContract.off("StakerRevealed", stakerRevealedListener)
+                // }
 
+                // stakerContract.on("StakerRevealed", stakerRevealedListener)
                 // Assuming the revealStaker function accepts the hashed root as its only argument
                 const stakerRevealTx = await stakerContract.revealStaker(
                     stakerData[index].share,
                     stakerData[index].proof,
                 )
                 await stakerRevealTx.wait()
+
+                // stakerContract.on("StakerRevealed", (staker, success) => {
+                //     console.log(
+                //         `Staker ${staker} reveal ${
+                //             success ? "successful" : "failed"
+                //         }`,
+                //     )
+                // })
             }
         }
+        stakerContractInstance.removeAllListeners("StakerRevealed")
         const flipperContract = new ethers.Contract(
             ANIMAGUSWAP_ADDRESS,
             ANIMAGUSWAP_ABI,
@@ -296,11 +326,30 @@ async function main() {
         )
         const flipperHashedBV = ethers.keccak256(ethers.toUtf8Bytes(message))
 
+        const flipperRevealedListener = (flipper: any, success: any) => {
+            console.log(
+                `Flipper ${flipper} reveal ${
+                    success ? "successful" : "failed"
+                }`,
+            )
+            // Remove the listener once it has fired to prevent it from being called multiple times.
+            flipperContract.off("FlipperRevealed", flipperRevealedListener)
+        }
+        flipperContract.on("FlipperRevealed", flipperRevealedListener)
+
         const flipperRevealTx = await flipperContract.revealFlipper(
             flipperHashedBV,
         )
         await flipperRevealTx.wait()
         console.log("Flipper revealed with B|V hash:", hashedBV)
+
+        // flipperContract.on("FlipperRevealed", (flipper, success) => {
+        //     console.log(
+        //         `Flipper ${flipper} reveal ${
+        //             success ? "successful" : "failed"
+        //         }`,
+        //     )
+        // })
     } else {
         console.log("Signature verification failed!")
     }
