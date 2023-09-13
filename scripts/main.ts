@@ -8,7 +8,6 @@ import { keccak256 } from "js-sha3"
 import { BUY, SELL } from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
 import { randomBit } from "./randomUtils"
-import { encodeWithoutPrefix } from "./utils"
 async function main() {
     // stage1: generate wallets
     const stakerWallets: any[] = []
@@ -281,14 +280,11 @@ async function main() {
                     stakerWallet,
                 )
                 console.log(stakerData[index].share.length)
-                let shareBytes32 = encodeWithoutPrefix(stakerData[index].share)
-                let proofBytes32 = stakerData[index].proof.map((proof) =>
-                    encodeWithoutPrefix(proof),
-                )
+
                 // Assuming the revealStaker function accepts the hashed root as its only argument
                 const stakerRevealTx = await stakerContract.revealStaker(
-                    shareBytes32,
-                    proofBytes32,
+                    stakerData[index].share,
+                    stakerData[index].proof,
                 )
                 await stakerRevealTx.wait()
             }
