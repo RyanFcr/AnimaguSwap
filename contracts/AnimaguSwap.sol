@@ -13,16 +13,12 @@ contract AnimaguSwap is IAnimaguSwap {
 
     // 记录每个参与者的commit哈希值
     bytes32 public _commitTx;
-    bytes32 public _commitB;
-    address public user;
-    address public flipper;
-    bool public userCommitted = false; // 标记user是否commit了
+    bytes32 public _commitWV;
+
+    bytes32 public revealedB; // 新增的状态变量，用于存储b的值
 
     // 合约不应该知道谁是user
-    constructor(address _user, address _flipper) {
-        user = _user;
-        flipper = _flipper;
-    }
+    constructor() {}
 
     function deposit(uint256 _amount) external payable override returns (bool) {
         require(_amount > 0, "Invalid deposit amount");
@@ -35,13 +31,10 @@ contract AnimaguSwap is IAnimaguSwap {
 
     function commit(
         bytes32 hashTx,
-        bytes32 hashB
+        bytes32 hashWV
     ) external override returns (bool) {
-        require(msg.sender == user, "Only user can commit");
-
         _commitTx = hashTx;
-        _commitB = hashB;
-        userCommitted = true;
+        _commitWV = hashWV;
         return true;
     }
 
@@ -49,7 +42,6 @@ contract AnimaguSwap is IAnimaguSwap {
         bytes32 share,
         bytes32[] memory proof
     ) external payable override returns (bool) {
-        require(userCommitted, "User has not committed yet");
         require(
             deposits[msg.sender] > 0,
             "Only stakers with deposits can reveal"
@@ -70,22 +62,22 @@ contract AnimaguSwap is IAnimaguSwap {
     }
 
     function revealFlipper(
-        bytes32 _hash
+        bytes32 _b
     ) external payable override returns (bool) {
-        require(userCommitted, "User has not committed yet");
-        require(msg.sender == flipper, "Only flipper can reveal");
         require(
             deposits[msg.sender] > 0,
             "Only flipper with deposit can reveal"
         );
-        if (_hash == _commitB) {
-            payable(msg.sender).transfer(deposits[msg.sender]);
-            deposits[msg.sender] = 0;
-            emit FlipperRevealed(msg.sender, true);
-        } else {
-            deposits[msg.sender] = 0; // Burn the deposit
-            emit FlipperRevealed(msg.sender, false);
-        }
+        require(
+            deposits[msg.sender] > 0,
+            "Only flipper with deposit can reveal"
+        );
+
+        revealedB = _b; // 将输入的b存储到状态变量中
+        payable(msg.sender).transfer(deposits[msg.sender]);
+        deposits[msg.sender] = 0;
+        emit FlipperRevealed(msg.sender, true);
+
         return true;
     }
 }

@@ -7,7 +7,12 @@ import { MerkleTree } from "merkletreejs"
 import { keccak256 } from "js-sha3"
 import { BUY, SELL } from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
+import { concatenateNumbers } from "./concatenateUtils"
 import { randomBit } from "./randomUtils"
+import { ec } from "elliptic"
+import * as EthCrypto from "eth-crypto"
+
+const curve = new ec("secp256k1")
 async function main() {
     // stage1: generate wallets
     const stakerWallets: any[] = []
@@ -60,10 +65,54 @@ async function main() {
             ).toFixed(8)}`,
         )
     }
-    // console.log("userWallet:\n")
-    // console.log(userWallet)
-    // console.log("stakerWallets:\n")
-    // console.log(stakerWallets)
+
+    const contractArtifactPath = path.join(
+        __dirname,
+        "../artifacts/contracts/AnimaguSwap.sol/AnimaguSwap.json",
+    )
+    const contractArtifact = JSON.parse(
+        readFileSync(contractArtifactPath, "utf8"),
+    )
+    const ANIMAGUSWAP_ABI = contractArtifact.abi
+    const ANIMAGUSWAP_ADDRESS = fs
+        .readFileSync("./output/AnimaguSwapAddress.txt")
+        .toString() // 你应该从deploy脚本中动态获取这个地址。
+    const depositAmount = ethers.parseEther("0.01") // or the amount you want to deposit
+
+    // initialize
+    for (let i = 0; i <= N; i++) {
+        const privateKey = process.env[`PRIVATE_KEY_${i}`]
+
+        if (!privateKey) {
+            console.error(`Private key for staker ${i} not found in .env file`)
+            continue
+        }
+
+        const stakerWallet = new ethers.Wallet(privateKey, provider)
+        const animaguSwapContract = new ethers.Contract(
+            ANIMAGUSWAP_ADDRESS,
+            ANIMAGUSWAP_ABI,
+            stakerWallet,
+        )
+
+        let balanceBefore = await provider.getBalance(stakerWallet.address)
+        console.log(
+            `Staker ${i} balance: ${parseFloat(
+                ethers.formatEther(balanceBefore),
+            ).toFixed(8)}`,
+        )
+        const depositTx = await animaguSwapContract.deposit(depositAmount, {
+            value: depositAmount,
+        })
+        await depositTx.wait()
+        console.log(`Deposited for staker ${stakerWallet.address}`)
+        let balanceAfter = await provider.getBalance(stakerWallet.address)
+        console.log(
+            `Staker ${i} balance: ${parseFloat(
+                ethers.formatEther(balanceAfter),
+            ).toFixed(8)}`,
+        )
+    }
 
     //DAI：USDT = 1:1
     //BUY(Y, X, Δr_Y, Δr_X, s, md)=SwapTokensforExactTokens
@@ -145,64 +194,39 @@ async function main() {
 
     // console.log(tx)
     // console.log(txb)
-
     const txbAsString = JSON.stringify(txb)
     console.log("txbAsString:", txbAsString)
-    const contractArtifactPath = path.join(
-        __dirname,
-        "../artifacts/contracts/AnimaguSwap.sol/AnimaguSwap.json",
-    )
-    const contractArtifact = JSON.parse(
-        readFileSync(contractArtifactPath, "utf8"),
-    )
-    const ANIMAGUSWAP_ABI = contractArtifact.abi
-    const ANIMAGUSWAP_ADDRESS = fs
-        .readFileSync("./output/AnimaguSwapAddress.txt")
-        .toString() // 你应该从deploy脚本中动态获取这个地址。
-    const depositAmount = ethers.parseEther("0.01") // or the amount you want to deposit
 
-    // stage1: deposit
-    for (let i = 0; i <= N; i++) {
-        const privateKey = process.env[`PRIVATE_KEY_${i}`]
-
-        if (!privateKey) {
-            console.error(`Private key for staker ${i} not found in .env file`)
-            continue
-        }
-
-        const stakerWallet = new ethers.Wallet(privateKey, provider)
-        const animaguSwapContract = new ethers.Contract(
-            ANIMAGUSWAP_ADDRESS,
-            ANIMAGUSWAP_ABI,
-            stakerWallet,
-        )
-
-        let balanceBefore = await provider.getBalance(stakerWallet.address)
-        console.log(
-            `Staker ${i} balance: ${parseFloat(
-                ethers.formatEther(balanceBefore),
-            ).toFixed(8)}`,
-        )
-        const depositTx = await animaguSwapContract.deposit(depositAmount, {
-            value: depositAmount,
-        })
-        await depositTx.wait()
-        console.log(`Deposited for staker ${stakerWallet.address}`)
-        let balanceAfter = await provider.getBalance(stakerWallet.address)
-        console.log(
-            `Staker ${i} balance: ${parseFloat(
-                ethers.formatEther(balanceAfter),
-            ).toFixed(8)}`,
-        )
-    }
-    // stage2: communicate
+    // stage2: transaction submission
     const V = randomBit()
-    const message = (V | B).toString()
+    const message = concatenateNumbers(B, V)
 
-    const signedMessageResult = await signedMessage(flipperWallet, message)
-    const verifySignatureResult = await verifySignature(
-        signedMessageResult,
+    console.log("message:", message)
+    const keyPair = curve.keyFromPrivate(flipperPrivateKey.slice(2), "hex") //需要删掉0x
+    const publicKeyHex = keyPair.getPublic("hex").slice(2) // 删除"04"前缀，因为eth-crypto期望一个没有前缀的公钥
+    console.log("Public Key:", publicKeyHex)
+    // 使用公钥加密消息
+    const encryptedMessage = await EthCrypto.encryptWithPublicKey(
+        publicKeyHex,
         message,
+    )
+    console.log("Encrypted message:", encryptedMessage)
+
+    // 使用私钥解密消息
+    const decryptedMessage = await EthCrypto.decryptWithPrivateKey(
+        flipperPrivateKey,
+        encryptedMessage,
+    )
+    console.log("Decrypted message:", decryptedMessage)
+
+    const signedCommitment = await signedMessage(
+        flipperWallet,
+        decryptedMessage,
+    )
+    console.log("signedCommitment:", signedCommitment)
+    const verifySignatureResult = await verifySignature(
+        signedCommitment,
+        decryptedMessage,
         flipperWallet.address,
     )
 
@@ -237,18 +261,20 @@ async function main() {
             userWallet,
         )
 
+        // stage 3: transaction inclusion
         // 计算 (B|V) 和 Merkle root 的哈希
-        const hashedBV = ethers.keccak256(
-            ethers.toUtf8Bytes((B | V).toString()),
+        const W = randomBit()
+        const hashedWV = ethers.keccak256(
+            ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
         )
         const hashedMerkleRoot = ethers.keccak256(ethers.toUtf8Bytes(root))
-
-        console.log("hashedBV:", hashedBV)
+        console.log("root:", root)
+        console.log("hashedWV:", hashedWV)
         console.log("hashedMerkleRoot:", hashedMerkleRoot)
         // 调用commit函数
         const commitTx = await animaguSwapContractWithUserWallet.commit(
-            hashedMerkleRoot,
-            hashedBV,
+            root,
+            hashedWV,
         )
         await commitTx.wait()
 
@@ -291,31 +317,11 @@ async function main() {
                     ANIMAGUSWAP_ABI,
                     stakerWallet,
                 )
-                // const stakerRevealedListener = (staker: any, success: any) => {
-                //     console.log(
-                //         `Staker ${staker} reveal ${
-                //             success ? "successful" : "failed"
-                //         }`,
-                //     )
-                //     // Remove listener after getting the event
-                //     stakerContract.off("StakerRevealed", stakerRevealedListener)
-                // }
-
-                // stakerContract.on("StakerRevealed", stakerRevealedListener)
-                // Assuming the revealStaker function accepts the hashed root as its only argument
                 const stakerRevealTx = await stakerContract.revealStaker(
                     stakerData[index].share,
                     stakerData[index].proof,
                 )
                 await stakerRevealTx.wait()
-
-                // stakerContract.on("StakerRevealed", (staker, success) => {
-                //     console.log(
-                //         `Staker ${staker} reveal ${
-                //             success ? "successful" : "failed"
-                //         }`,
-                //     )
-                // })
             }
         }
         stakerContractInstance.removeAllListeners("StakerRevealed")
@@ -341,7 +347,7 @@ async function main() {
             flipperHashedBV,
         )
         await flipperRevealTx.wait()
-        console.log("Flipper revealed with B|V hash:", hashedBV)
+        console.log("Flipper revealed with B|V hash:", hashedWV)
 
         // flipperContract.on("FlipperRevealed", (flipper, success) => {
         //     console.log(
