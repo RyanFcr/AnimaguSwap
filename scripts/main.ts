@@ -14,7 +14,7 @@ import * as EthCrypto from "eth-crypto"
 
 const curve = new ec("secp256k1")
 async function main() {
-    // stage1: generate wallets
+    // Initialization 初始化
     const stakerWallets: any[] = []
     const N = 2 // N is the number of stakers
     const userPrivateKey = process.env.PRIVATE_KEY
@@ -234,27 +234,81 @@ async function main() {
         console.log("Signature verified!")
         // 分割 txb (assuming it's a string of the tx hash)
         const shares = secrets.share(secrets.str2hex(txbAsString), N, N) // Splitting into N shares with N required to reconstruct
-        // 在每个share前加上“0x”
-        const prefixedShares = shares.map((share) => "0x" + share)
+        // // 在每个share前加上“0x”
+        // const prefixedShares = shares.map((share) => "0x" + share)
 
-        // 使用 prefixedShares 创建 Merkle 树
-        const hashedShares = prefixedShares.map((share) =>
-            ethers.keccak256(ethers.toUtf8Bytes(share)),
-        )
-        console.log("hashedShares:", hashedShares)
-        const tree = new MerkleTree(hashedShares, keccak256, { sort: true })
+        // // 使用 prefixedShares 创建 Merkle 树
+        // const hashedShares = prefixedShares.map((share) =>
+        //     ethers.keccak256(ethers.toUtf8Bytes(share)),
+        // )
+        // console.log("hashedShares:", hashedShares)
+        const tree = new MerkleTree(shares, keccak256, { sort: true })
         const root = tree.getRoot().toString("hex")
 
         // 为每个 staker 创建一个数组，其中包含他们的 share 和其对应的 Merkle proof
         const stakerData = stakerWallets.map((staker, index) => {
-            const proof = tree.getHexProof(hashedShares[index])
+            const proof = tree.getHexProof(shares[index])
             return {
                 stakerAddress: staker.address,
-                share: hashedShares[index],
+                share: shares[index],
                 proof: proof,
             }
         })
         console.log(stakerData)
+        // 签名每个'share'和'proof'
+        const stakerDataWithSignatures = []
+        for (const data of stakerData) {
+            const shareSignature = await signedMessage(userWallet, data.share)
+            const proofSignature = await signedMessage(
+                userWallet,
+                data.proof.join(""),
+            )
+
+            stakerDataWithSignatures.push({
+                ...data,
+                shareSignature: shareSignature,
+                proofSignature: proofSignature,
+            })
+        }
+
+        let areSignaturesValid = true
+        for (const data of stakerDataWithSignatures) {
+            const isShareSignatureValid = await verifySignature(
+                data.shareSignature,
+                data.share,
+                userWallet.address,
+            )
+            const isProofSignatureValid = await verifySignature(
+                data.proofSignature,
+                data.proof.join(""),
+                userWallet.address,
+            )
+
+            if (!isShareSignatureValid || !isProofSignatureValid) {
+                areSignaturesValid = false
+                break
+            }
+        }
+
+        if (areSignaturesValid) {
+            console.log("All signatures are valid!")
+        } else {
+            console.error("One or more signatures are invalid!")
+        }
+        // staker verify whether user cheats or not
+        for (let index = 0; index < N; index++) {
+            const isValidProof = tree.verify(
+                stakerData[index].proof, // proof for the encryptedShare
+                stakerData[index].share, // the encryptedShare itself
+                root, // the root of the Merkle Tree
+            )
+
+            console.log(
+                `Proof for staker ${index} is`,
+                isValidProof ? "valid" : "invalid",
+            )
+        }
+
         const animaguSwapContractWithUserWallet = new ethers.Contract(
             ANIMAGUSWAP_ADDRESS,
             ANIMAGUSWAP_ABI,
