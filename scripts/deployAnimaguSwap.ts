@@ -14,10 +14,7 @@ async function main() {
 
     const AnimaguSwapFactory = await ethers.getContractFactory("AnimaguSwap")
     console.log("Deploying AnimaguSwap...")
-    const animaguSwap = await AnimaguSwapFactory.deploy(
-        userWallet.address,
-        flipperWallet.address,
-    )
+    const animaguSwap = await AnimaguSwapFactory.deploy()
     const address = await animaguSwap.getAddress()
     console.log("AnimaguSwap deployed to:", address)
     // if (network.config.chainId === 11155111 && process.env.ETHERSCAN_API_KEY) {

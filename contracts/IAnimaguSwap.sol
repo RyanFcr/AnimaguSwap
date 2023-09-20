@@ -11,5 +11,12 @@ interface IAnimaguSwap {
         bytes32[] memory proof
     ) external payable returns (bool);
 
-    function revealFlipper(bytes32 _b) external payable returns (bool);
+    function revealFlipper(uint8 _b) external returns (bool);
+
+    function userComplain(
+        address flipperWallet,
+        bytes32 signature,
+        uint8 V,
+        uint8 W
+    ) external payable returns (bool);
 }

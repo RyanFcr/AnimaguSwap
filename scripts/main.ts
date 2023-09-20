@@ -15,6 +15,7 @@ import * as EthCrypto from "eth-crypto"
 const curve = new ec("secp256k1")
 async function main() {
     // Initialization 初始化
+
     const stakerWallets: any[] = []
     const N = 2 // N is the number of stakers
     const userPrivateKey = process.env.PRIVATE_KEY
@@ -78,8 +79,11 @@ async function main() {
         .readFileSync("./output/AnimaguSwapAddress.txt")
         .toString() // 你应该从deploy脚本中动态获取这个地址。
     const depositAmount = ethers.parseEther("0.01") // or the amount you want to deposit
-
-    // initialize
+    const animaguSwapContractWithUserWallet = new ethers.Contract(
+        ANIMAGUSWAP_ADDRESS,
+        ANIMAGUSWAP_ABI,
+        userWallet,
+    )
     for (let i = 0; i <= N; i++) {
         const privateKey = process.env[`PRIVATE_KEY_${i}`]
 
@@ -132,6 +136,7 @@ async function main() {
     //     18,
     // )
 
+    // Stage 1: transaction creation
     const UNI_ADDRESS = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
     const UNI_ABI = JSON.parse(fs.readFileSync("./abis/erc20.json").toString())
     const UNI_CONTRACT = new ethers.Contract(UNI_ADDRESS, UNI_ABI, userWallet)
@@ -197,7 +202,7 @@ async function main() {
     const txbAsString = JSON.stringify(txb)
     console.log("txbAsString:", txbAsString)
 
-    // stage2: transaction submission
+    // Stage2: transaction submission
     const V = randomBit()
     const message = concatenateNumbers(B, V)
 
@@ -205,6 +210,8 @@ async function main() {
     const keyPair = curve.keyFromPrivate(flipperPrivateKey.slice(2), "hex") //需要删掉0x
     const publicKeyHex = keyPair.getPublic("hex").slice(2) // 删除"04"前缀，因为eth-crypto期望一个没有前缀的公钥
     console.log("Public Key:", publicKeyHex)
+
+    // 公钥私钥传输
     // 使用公钥加密消息
     const encryptedMessage = await EthCrypto.encryptWithPublicKey(
         publicKeyHex,
@@ -219,6 +226,7 @@ async function main() {
     )
     console.log("Decrypted message:", decryptedMessage)
 
+    // Flipper Sign it
     const signedCommitment = await signedMessage(
         flipperWallet,
         decryptedMessage,
@@ -230,6 +238,7 @@ async function main() {
         flipperWallet.address,
     )
 
+    // Merkle Tree
     if (verifySignatureResult) {
         console.log("Signature verified!")
         // 分割 txb (assuming it's a string of the tx hash)
@@ -255,7 +264,7 @@ async function main() {
             }
         })
         console.log(stakerData)
-        // 签名每个'share'和'proof'
+        // 签名每个'share'和'proof' user 签名，验证，以防User作恶
         const stakerDataWithSignatures = []
         for (const data of stakerData) {
             const shareSignature = await signedMessage(userWallet, data.share)
@@ -309,15 +318,10 @@ async function main() {
             )
         }
 
-        const animaguSwapContractWithUserWallet = new ethers.Contract(
-            ANIMAGUSWAP_ADDRESS,
-            ANIMAGUSWAP_ABI,
-            userWallet,
-        )
-
         // stage 3: transaction inclusion
         // 计算 (B|V) 和 Merkle root 的哈希
         const W = randomBit()
+        console.log("W+V:", concatenateNumbers(W, V))
         const hashedWV = ethers.keccak256(
             ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
         )
@@ -327,7 +331,7 @@ async function main() {
         console.log("hashedMerkleRoot:", hashedMerkleRoot)
         // 调用commit函数
         const commitTx = await animaguSwapContractWithUserWallet.commit(
-            root,
+            hashedMerkleRoot,
             hashedWV,
         )
         await commitTx.wait()
@@ -344,39 +348,26 @@ async function main() {
             )
         })
         for (let index = 0; index < N; index++) {
-            const isValidProof = tree.verify(
-                stakerData[index].proof, // proof for the encryptedShare
-                stakerData[index].share, // the encryptedShare itself
-                root, // the root of the Merkle Tree
-            )
-
-            console.log(
-                `Proof for staker ${index} is`,
-                isValidProof ? "valid" : "invalid",
-            )
-            // user didn't cheat
-            if (isValidProof) {
-                const privateKey = process.env[`PRIVATE_KEY_${index + 1}`]
-                if (!privateKey) {
-                    console.error(
-                        `Private key for staker ${
-                            index + 1
-                        } not found in .env file`,
-                    )
-                    continue
-                }
-                const stakerWallet = new ethers.Wallet(privateKey, provider)
-                const stakerContract = new ethers.Contract(
-                    ANIMAGUSWAP_ADDRESS,
-                    ANIMAGUSWAP_ABI,
-                    stakerWallet,
+            const privateKey = process.env[`PRIVATE_KEY_${index + 1}`]
+            if (!privateKey) {
+                console.error(
+                    `Private key for staker ${
+                        index + 1
+                    } not found in .env file`,
                 )
-                const stakerRevealTx = await stakerContract.revealStaker(
-                    stakerData[index].share,
-                    stakerData[index].proof,
-                )
-                await stakerRevealTx.wait()
+                continue
             }
+            const stakerWallet = new ethers.Wallet(privateKey, provider)
+            const stakerContract = new ethers.Contract(
+                ANIMAGUSWAP_ADDRESS,
+                ANIMAGUSWAP_ABI,
+                stakerWallet,
+            )
+            const stakerRevealTx = await stakerContract.revealStaker(
+                stakerData[index].share,
+                stakerData[index].proof,
+            )
+            await stakerRevealTx.wait()
         }
         stakerContractInstance.removeAllListeners("StakerRevealed")
         const flipperContract = new ethers.Contract(
@@ -397,9 +388,7 @@ async function main() {
         }
         flipperContract.on("FlipperRevealed", flipperRevealedListener)
 
-        const flipperRevealTx = await flipperContract.revealFlipper(
-            flipperHashedBV,
-        )
+        const flipperRevealTx = await flipperContract.revealFlipper(B)
         await flipperRevealTx.wait()
         console.log("Flipper revealed with B|V hash:", hashedWV)
 
