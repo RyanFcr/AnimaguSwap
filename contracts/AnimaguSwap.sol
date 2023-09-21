@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 import {IAnimaguSwap} from "./IAnimaguSwap.sol";
-import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+// import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "./Merkle.sol";
 
 contract AnimaguSwap is IAnimaguSwap {
     event StakerRevealed(address indexed staker, bool success);
@@ -39,8 +40,8 @@ contract AnimaguSwap is IAnimaguSwap {
     }
 
     function revealStaker(
-        bytes32 share,
-        bytes32[] memory proof
+        bytes memory share,
+        bytes[] memory proof
     ) external payable override returns (bool) {
         require(
             deposits[msg.sender] > 0,

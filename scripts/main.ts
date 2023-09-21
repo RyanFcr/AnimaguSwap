@@ -369,28 +369,28 @@ async function main() {
             )
             await stakerRevealTx.wait()
         }
-        stakerContractInstance.removeAllListeners("StakerRevealed")
-        const flipperContract = new ethers.Contract(
-            ANIMAGUSWAP_ADDRESS,
-            ANIMAGUSWAP_ABI,
-            flipperWallet,
-        )
-        const flipperHashedBV = ethers.keccak256(ethers.toUtf8Bytes(message))
+        // stakerContractInstance.removeAllListeners("StakerRevealed")
+        // const flipperContract = new ethers.Contract(
+        //     ANIMAGUSWAP_ADDRESS,
+        //     ANIMAGUSWAP_ABI,
+        //     flipperWallet,
+        // )
+        // const flipperHashedBV = ethers.keccak256(ethers.toUtf8Bytes(message))
 
-        const flipperRevealedListener = (flipper: any, success: any) => {
-            console.log(
-                `Flipper ${flipper} reveal ${
-                    success ? "successful" : "failed"
-                }`,
-            )
-            // Remove the listener once it has fired to prevent it from being called multiple times.
-            flipperContract.off("FlipperRevealed", flipperRevealedListener)
-        }
-        flipperContract.on("FlipperRevealed", flipperRevealedListener)
+        // const flipperRevealedListener = (flipper: any, success: any) => {
+        //     console.log(
+        //         `Flipper ${flipper} reveal ${
+        //             success ? "successful" : "failed"
+        //         }`,
+        //     )
+        //     // Remove the listener once it has fired to prevent it from being called multiple times.
+        //     flipperContract.off("FlipperRevealed", flipperRevealedListener)
+        // }
+        // flipperContract.on("FlipperRevealed", flipperRevealedListener)
 
-        const flipperRevealTx = await flipperContract.revealFlipper(B)
-        await flipperRevealTx.wait()
-        console.log("Flipper revealed with B|V hash:", hashedWV)
+        // const flipperRevealTx = await flipperContract.revealFlipper(B)
+        // await flipperRevealTx.wait()
+        // console.log("Flipper revealed with B|V hash:", hashedWV)
 
         // flipperContract.on("FlipperRevealed", (flipper, success) => {
         //     console.log(
