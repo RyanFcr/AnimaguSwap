@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 import {IAnimaguSwap} from "./IAnimaguSwap.sol";
-// import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import "./Merkle.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+
+// import "./Merkle.sol";
 
 contract AnimaguSwap is IAnimaguSwap {
     event StakerRevealed(address indexed staker, bool success);
@@ -49,7 +50,11 @@ contract AnimaguSwap is IAnimaguSwap {
         );
 
         // 使用MerkleProof库的verify函数验证
-        bool isValidProof = MerkleProof.verify(proof, _commitTx, share);
+        // 对原始数据进行哈希，得到固定大小的哈希值
+        bytes32 hashedShare = keccak256(share);
+
+        // 使用MerkleProof库的verify函数验证
+        bool isValidProof = MerkleProof.verify(proof, _commitTx, hashedShare);
 
         if (isValidProof) {
             payable(msg.sender).transfer(deposits[msg.sender]);

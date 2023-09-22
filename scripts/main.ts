@@ -244,19 +244,26 @@ async function main() {
         // 分割 txb (assuming it's a string of the tx hash)
         const shares = secrets.share(secrets.str2hex(txbAsString), N, N) // Splitting into N shares with N required to reconstruct
         // // 在每个share前加上“0x”
-        // const prefixedShares = shares.map((share) => "0x" + share)
+        const prefixedShares = shares.map((share) => "0x" + share)
 
         // // 使用 prefixedShares 创建 Merkle 树
-        // const hashedShares = prefixedShares.map((share) =>
-        //     ethers.keccak256(ethers.toUtf8Bytes(share)),
-        // )
+        const hashedShares = prefixedShares.map((share) =>
+            ethers.keccak256(ethers.toUtf8Bytes(share)),
+        )
         // console.log("hashedShares:", hashedShares)
         const tree = new MerkleTree(shares, keccak256, { sort: true })
         const root = tree.getRoot().toString("hex")
 
+        const hashedTree = new MerkleTree(hashedShares, keccak256, {
+            sort: true,
+        })
+        const hashedRoot = hashedTree.getRoot().toString("hex")
+        console.log("root:", root)
+        console.log("hashedRoot:", hashedRoot)
+
         // 为每个 staker 创建一个数组，其中包含他们的 share 和其对应的 Merkle proof
         const stakerData = stakerWallets.map((staker, index) => {
-            const proof = tree.getHexProof(shares[index])
+            const proof = tree.getHexProof(hashedShares[index])
             return {
                 stakerAddress: staker.address,
                 share: shares[index],
