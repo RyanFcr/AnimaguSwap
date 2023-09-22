@@ -250,7 +250,7 @@ async function main() {
         const hashedShares = prefixedShares.map((share) =>
             ethers.keccak256(ethers.toUtf8Bytes(share)),
         )
-        // console.log("hashedShares:", hashedShares)
+        console.log("hashedShares:", hashedShares)
         const tree = new MerkleTree(shares, keccak256, { sort: true })
         const root = tree.getRoot().toString("hex")
 
@@ -263,7 +263,9 @@ async function main() {
 
         // 为每个 staker 创建一个数组，其中包含他们的 share 和其对应的 Merkle proof
         const stakerData = stakerWallets.map((staker, index) => {
-            const proof = tree.getHexProof(hashedShares[index])
+            const proof = hashedTree.getHexProof(hashedShares[index])
+            // console.log("hashedShares[index]:", hashedShares[index])
+            // console.log("proof:", proof)
             return {
                 stakerAddress: staker.address,
                 share: shares[index],
@@ -313,10 +315,13 @@ async function main() {
         }
         // staker verify whether user cheats or not
         for (let index = 0; index < N; index++) {
+            const hashedShare = ethers.keccak256(
+                ethers.toUtf8Bytes("0x" + stakerData[index].share),
+            )
             const isValidProof = tree.verify(
                 stakerData[index].proof, // proof for the encryptedShare
-                stakerData[index].share, // the encryptedShare itself
-                root, // the root of the Merkle Tree
+                hashedShare, // the encryptedShare itself
+                hashedRoot, // the root of the Merkle Tree
             )
 
             console.log(
@@ -332,8 +337,10 @@ async function main() {
         const hashedWV = ethers.keccak256(
             ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
         )
-        const hashedMerkleRoot = ethers.keccak256(ethers.toUtf8Bytes(root))
-        console.log("root:", root)
+        const hashedMerkleRoot = ethers.keccak256(
+            ethers.toUtf8Bytes(hashedRoot),
+        )
+        console.log("root:", hashedRoot)
         console.log("hashedWV:", hashedWV)
         console.log("hashedMerkleRoot:", hashedMerkleRoot)
         // 调用commit函数

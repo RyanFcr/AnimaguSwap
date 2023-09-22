@@ -41,8 +41,8 @@ contract AnimaguSwap is IAnimaguSwap {
     }
 
     function revealStaker(
-        bytes memory share,
-        bytes[] memory proof
+        string memory share,
+        bytes32[] memory proof
     ) external payable override returns (bool) {
         require(
             deposits[msg.sender] > 0,
@@ -51,7 +51,7 @@ contract AnimaguSwap is IAnimaguSwap {
 
         // 使用MerkleProof库的verify函数验证
         // 对原始数据进行哈希，得到固定大小的哈希值
-        bytes32 hashedShare = keccak256(share);
+        bytes32 hashedShare = keccak256(abi.encodePacked(share));
 
         // 使用MerkleProof库的verify函数验证
         bool isValidProof = MerkleProof.verify(proof, _commitTx, hashedShare);

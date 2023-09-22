@@ -7,8 +7,8 @@ interface IAnimaguSwap {
     function commit(bytes32 _hashTx, bytes32 _hashWV) external returns (bool);
 
     function revealStaker(
-        bytes memory share,
-        bytes[] memory proof
+        string memory share,
+        bytes32[] memory proof
     ) external payable returns (bool);
 
     function revealFlipper(uint8 _b) external returns (bool);
