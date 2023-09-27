@@ -337,15 +337,15 @@ async function main() {
         const hashedWV = ethers.keccak256(
             ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
         )
-        const hashedMerkleRoot = ethers.keccak256(
-            ethers.toUtf8Bytes(hashedRoot),
-        )
-        console.log("root:", hashedRoot)
+        // const hashedMerkleRoot = ethers.keccak256(
+        //     ethers.toUtf8Bytes(hashedRoot),
+        // )
+        console.log("hashedRoot:", hashedRoot)
         console.log("hashedWV:", hashedWV)
-        console.log("hashedMerkleRoot:", hashedMerkleRoot)
+        // console.log("hashedMerkleRoot:", hashedRoot)
         // 调用commit函数
         const commitTx = await animaguSwapContractWithUserWallet.commit(
-            hashedMerkleRoot,
+            "0x" + hashedRoot,
             hashedWV,
         )
         await commitTx.wait()
