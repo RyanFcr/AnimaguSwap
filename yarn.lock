@@ -4282,7 +4282,7 @@ secp256k1@3.7.1:
     nan "^2.14.0"
     safe-buffer "^5.1.2"
 
-secp256k1@5.0.0:
+secp256k1@5.0.0, secp256k1@^5.0.0:
   version "5.0.0"
   resolved "https://registry.npmjs.org/secp256k1/-/secp256k1-5.0.0.tgz"
   integrity sha512-TKWX8xvoGHrxVdqbYeZM9w+izTF4b9z3NhSaDkdn81btvuh+ivbIMGT/zQvDtTFWhRlThpoz6LEYTr7n8A5GcA==
@@ -4298,15 +4298,6 @@ secp256k1@^4.0.1:
   dependencies:
     elliptic "^6.5.4"
     node-addon-api "^2.0.0"
-    node-gyp-build "^4.2.0"
-
-secp256k1@^5.0.0:
-  version "5.0.0"
-  resolved "https://registry.npmmirror.com/secp256k1/-/secp256k1-5.0.0.tgz#be6f0c8c7722e2481e9773336d351de8cddd12f7"
-  integrity sha512-TKWX8xvoGHrxVdqbYeZM9w+izTF4b9z3NhSaDkdn81btvuh+ivbIMGT/zQvDtTFWhRlThpoz6LEYTr7n8A5GcA==
-  dependencies:
-    elliptic "^6.5.4"
-    node-addon-api "^5.0.0"
     node-gyp-build "^4.2.0"
 
 secrets.js-grempe@^2.0.0:
@@ -4373,6 +4364,11 @@ sha1@^1.1.1:
   dependencies:
     charenc ">= 0.0.1"
     crypt ">= 0.0.1"
+
+shamirs-secret-sharing@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.npmmirror.com/shamirs-secret-sharing/-/shamirs-secret-sharing-1.0.1.tgz#74fb0aa60f7462feafb602f881cb058722739e54"
+  integrity sha512-+sbTZJfis6EtDZTgkf0gSUahXDDuFRY8GK0DUw0lXqMDN54a5ywLD6D2sab45AA2SLQxTS4gB0kUmelNVaPVlA==
 
 shelljs@^0.8.3:
   version "0.8.5"

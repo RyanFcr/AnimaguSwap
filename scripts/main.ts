@@ -2,7 +2,7 @@ import { ethers } from "hardhat"
 import * as fs from "fs"
 import * as path from "path"
 import { readFileSync } from "fs"
-import * as secrets from "secrets.js-grempe"
+// import * as secrets from "secrets.js-grempe"
 import { MerkleTree } from "merkletreejs"
 import { keccak256 } from "js-sha3"
 import { BUY, SELL } from "./uniswapAction"
@@ -11,7 +11,7 @@ import { concatenateNumbers } from "./concatenateUtils"
 import { randomBit } from "./randomUtils"
 import { ec } from "elliptic"
 import * as EthCrypto from "eth-crypto"
-
+import sss from "shamirs-secret-sharing"
 const curve = new ec("secp256k1")
 async function main() {
     // Initialization 初始化
@@ -139,7 +139,7 @@ async function main() {
     // Stage 1: transaction creation
     const UNI_ADDRESS = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
     const UNI_ABI = JSON.parse(fs.readFileSync("./abis/erc20.json").toString())
-    const UNI_CONTRACT = new ethers.Contract(UNI_ADDRESS, UNI_ABI, userWallet)
+    // const UNI_CONTRACT = new ethers.Contract(UNI_ADDRESS, UNI_ABI, userWallet)
 
     const WETH_SEPOLIA_ADDRESS = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
 
@@ -242,12 +242,22 @@ async function main() {
     if (verifySignatureResult) {
         console.log("Signature verified!")
         // 分割 txb (assuming it's a string of the tx hash)
-        const shares = secrets.share(secrets.str2hex(txbAsString), N, N) // Splitting into N shares with N required to reconstruct
+        // const shares = secrets.share(secrets.str2hex(txbAsString), N, N) // Splitting into N shares with N required to reconstruct
         // // 在每个share前加上“0x”
-        const prefixedShares = shares.map((share) => "0x" + share)
+
+        const secretBuffer = Buffer.from(txbAsString, "utf8")
+        const shares = sss.split(secretBuffer, {
+            shares: N,
+            threshold: N,
+        })
+        // const shares = sharesBuffers.map((shareBuffer: string) =>
+        //     shareBuffer.toString("hex"),
+        // )
+
+        const prefixedShares = shares.map((share: string) => "0x" + share)
 
         // // 使用 prefixedShares 创建 Merkle 树
-        const hashedShares = prefixedShares.map((share) =>
+        const hashedShares = prefixedShares.map((share: string) =>
             ethers.keccak256(ethers.toUtf8Bytes(share)),
         )
         console.log("hashedShares:", hashedShares)
@@ -351,6 +361,27 @@ async function main() {
         await commitTx.wait()
 
         console.log("Commit transaction sent and mined.")
+        const flipperContract = new ethers.Contract(
+            ANIMAGUSWAP_ADDRESS,
+            ANIMAGUSWAP_ABI,
+            flipperWallet,
+        )
+
+        const flipperRevealedListener = (flipper: any, success: any) => {
+            console.log(
+                `Flipper ${flipper} reveal ${
+                    success ? "successful" : "failed"
+                }`,
+            )
+            // Remove the listener once it has fired to prevent it from being called multiple times.
+            flipperContract.off("FlipperRevealed", flipperRevealedListener)
+        }
+        flipperContract.on("FlipperRevealed", flipperRevealedListener)
+
+        let flipperB = decryptedMessage[0]
+        const flipperRevealTx = await flipperContract.revealFlipper(flipperB)
+        await flipperRevealTx.wait()
+
         const stakerContractInstance = new ethers.Contract(
             ANIMAGUSWAP_ADDRESS,
             ANIMAGUSWAP_ABI,
@@ -378,41 +409,12 @@ async function main() {
                 stakerWallet,
             )
             const stakerRevealTx = await stakerContract.revealStaker(
-                stakerData[index].share,
+                "0x" + stakerData[index].share,
                 stakerData[index].proof,
             )
             await stakerRevealTx.wait()
         }
-        // stakerContractInstance.removeAllListeners("StakerRevealed")
-        // const flipperContract = new ethers.Contract(
-        //     ANIMAGUSWAP_ADDRESS,
-        //     ANIMAGUSWAP_ABI,
-        //     flipperWallet,
-        // )
-        // const flipperHashedBV = ethers.keccak256(ethers.toUtf8Bytes(message))
-
-        // const flipperRevealedListener = (flipper: any, success: any) => {
-        //     console.log(
-        //         `Flipper ${flipper} reveal ${
-        //             success ? "successful" : "failed"
-        //         }`,
-        //     )
-        //     // Remove the listener once it has fired to prevent it from being called multiple times.
-        //     flipperContract.off("FlipperRevealed", flipperRevealedListener)
-        // }
-        // flipperContract.on("FlipperRevealed", flipperRevealedListener)
-
-        // const flipperRevealTx = await flipperContract.revealFlipper(B)
-        // await flipperRevealTx.wait()
-        // console.log("Flipper revealed with B|V hash:", hashedWV)
-
-        // flipperContract.on("FlipperRevealed", (flipper, success) => {
-        //     console.log(
-        //         `Flipper ${flipper} reveal ${
-        //             success ? "successful" : "failed"
-        //         }`,
-        //     )
-        // })
+        stakerContractInstance.removeAllListeners("StakerRevealed")
     } else {
         console.log("Signature verification failed!")
     }

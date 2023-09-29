@@ -19,6 +19,12 @@ contract AnimaguSwap is IAnimaguSwap {
 
     uint8 public revealedB; // 新增的状态变量，用于存储b的值
 
+    // 新增的计数器状态变量
+    uint256 public shareCounter = 0;
+
+    // 新增一个状态变量用于存储所有的shares
+    string[] public sharesArray;
+
     // 合约不应该知道谁是user
     constructor() {}
 

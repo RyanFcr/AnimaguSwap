@@ -42,6 +42,7 @@
     "ethereumjs-util": "^7.1.5",
     "merkletreejs": "^0.3.10",
     "secp256k1": "^5.0.0",
-    "secrets.js-grempe": "^2.0.0"
+    "secrets.js-grempe": "^2.0.0",
+    "shamirs-secret-sharing": "^1.0.1"
   }
 }
