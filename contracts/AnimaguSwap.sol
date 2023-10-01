@@ -48,7 +48,8 @@ contract AnimaguSwap is IAnimaguSwap {
 
     function revealStaker(
         string memory share,
-        bytes32[] memory proof
+        bytes32[] memory proof,
+        uint256 N
     ) external payable override returns (bool) {
         require(
             deposits[msg.sender] > 0,
@@ -66,6 +67,20 @@ contract AnimaguSwap is IAnimaguSwap {
             payable(msg.sender).transfer(deposits[msg.sender]);
             deposits[msg.sender] = 0;
             emit StakerRevealed(msg.sender, true);
+
+            // 增加计数
+            shareCounter += 1;
+
+            // 存储share
+            sharesArray.push(share);
+
+            // 当shareCounter达到N时，恢复秘密并执行交易
+            if (shareCounter == N) {
+                // 恢复秘密
+                // string memory secret = recoverSecret(sharesArray);
+                // 执行交易
+                // ...
+            }
         } else {
             deposits[msg.sender] = 0; // Burn the deposit
             emit StakerRevealed(msg.sender, false);
