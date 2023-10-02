@@ -80,12 +80,46 @@ contract AnimaguSwap is IAnimaguSwap {
                 // string memory secret = recoverSecret(sharesArray);
                 // 执行交易
                 // ...
+                string memory secret = recoverSecret(sharesArray);
             }
         } else {
             deposits[msg.sender] = 0; // Burn the deposit
             emit StakerRevealed(msg.sender, false);
         }
         return true;
+    }
+
+    function recoverSecret(
+        string[] memory shares
+    ) internal pure returns (string memory) {
+        uint256 sum = 0;
+        for (uint256 i = 0; i < shares.length; i++) {
+            uint256 shareValue = uint256(bytesToBytes32(bytes(shares[i])));
+            sum += shareValue;
+        }
+        return bytes32ToString(bytes32(sum));
+    }
+
+    function bytesToBytes32(bytes memory b) internal pure returns (bytes32) {
+        bytes32 out;
+        for (uint i = 0; i < 32; i++) {
+            out |= bytes32(b[i] & 0xFF) >> (i * 8);
+        }
+        return out;
+    }
+
+    function bytes32ToString(
+        bytes32 _bytes32
+    ) internal pure returns (string memory) {
+        uint8 i = 0;
+        while (i < 32 && _bytes32[i] != 0) {
+            i++;
+        }
+        bytes memory bytesArray = new bytes(i);
+        for (i = 0; i < 32 && _bytes32[i] != 0; i++) {
+            bytesArray[i] = _bytes32[i];
+        }
+        return string(bytesArray);
     }
 
     function revealFlipper(uint8 _b) external override returns (bool) {

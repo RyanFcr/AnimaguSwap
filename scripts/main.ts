@@ -21,54 +21,55 @@ async function main() {
 
     const stakerWallets: any[] = []
     const N = 2 // N is the number of stakers
-    const userPrivateKey = process.env.PRIVATE_KEY
-
-    if (!userPrivateKey) {
-        console.error("Private key not found in .env file")
-        return
-    }
-
     const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
     const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
-    const userWallet = new ethers.Wallet(userPrivateKey, provider)
-
     const flipperPrivateKey = process.env[`PRIVATE_KEY_${0}`]
     if (!flipperPrivateKey) {
         console.error(`Private key for staker ${0} not found in .env file`)
         return
     }
     const flipperWallet = new ethers.Wallet(flipperPrivateKey, provider)
+
+    //User Wallet
+    const userPrivateKey = process.env.PRIVATE_KEY
+    if (!userPrivateKey) {
+        console.error("Private key not found in .env file")
+        return
+    }
+    const userWallet = new ethers.Wallet(userPrivateKey, provider)
+
     // 0 is the flipper
     // 1, 2, 3, ... are the stakers
-    for (let i = 0; i <= N; i++) {
-        // N is the number of stakers
-        const privateKey = process.env[`PRIVATE_KEY_${i}`]
+    // 这个本来不是整个系统的一部分，但是一开始staker和flipper都没钱，所以有了这一步让转点钱给
+    // for (let i = 0; i <= N; i++) {
+    //     // N is the number of stakers
+    //     const privateKey = process.env[`PRIVATE_KEY_${i}`]
 
-        if (!privateKey) {
-            console.error(`Private key for staker ${i} not found in .env file`)
-            continue
-        }
-        const wallet = new ethers.Wallet(privateKey, provider)
-        // 0 is the flipper
-        if (i > 0) {
-            stakerWallets.push({
-                address: wallet.address,
-                privateKey: wallet.privateKey,
-            })
-        }
-        const amountToSend = ethers.parseEther("0.01") // 0.01 ETH in wei
-        const tx = await userWallet.sendTransaction({
-            to: wallet.address,
-            value: amountToSend,
-        })
-        await tx.wait() // Wait for the transaction to be mined
-        let balance = await provider.getBalance(wallet.address)
-        console.log(
-            `Staker ${i} balance: ${parseFloat(
-                ethers.formatEther(balance),
-            ).toFixed(8)}`,
-        )
-    }
+    //     if (!privateKey) {
+    //         console.error(`Private key for staker ${i} not found in .env file`)
+    //         continue
+    //     }
+    //     const wallet = new ethers.Wallet(privateKey, provider)
+    //     // 0 is the flipper
+    //     if (i > 0) {
+    //         stakerWallets.push({
+    //             address: wallet.address,
+    //             privateKey: wallet.privateKey,
+    //         })
+    //     }
+    //     const amountToSend = ethers.parseEther("0.01") // 0.01 ETH in wei
+    //     const tx = await userWallet.sendTransaction({
+    //         to: wallet.address,
+    //         value: amountToSend,
+    //     })
+    //     await tx.wait() // Wait for the transaction to be mined
+    //     let balance = await provider.getBalance(wallet.address)
+    //     console.log(
+    //         `Staker ${i} balance: ${parseFloat(
+    //             ethers.formatEther(balance),
+    //         ).toFixed(8)}`,
+    //     )
+    // }
 
     const contractArtifactPath = path.join(
         __dirname,
@@ -253,8 +254,9 @@ async function main() {
         //     shares: N,
         //     threshold: N,
         // })
-        const hexTxbAsSrting = stringToHex(txbAsString)
-        const secretNumber = BigInt("0x" + hexTxbAsSrting) // 将秘密转换为bigint
+        const hexTxbAsString = stringToHex(txbAsString)
+        console.log("hexTxbAsString", hexTxbAsString)
+        const secretNumber = BigInt("0x" + hexTxbAsString) // 将秘密转换为bigint
         const FIELD_SIZE = BigInt(
             "115792089237316195423570985008687907853269984665640564039457584007913129639935",
         ) // 例如：使用2^256-1作为有限域的大小
@@ -442,6 +444,10 @@ async function main() {
     } else {
         console.log("Signature verification failed!")
     }
+}
+
+async function runSystem(userPrivateKey: string) {
+    // ... [您的原始代码，但不包括最初的userPrivateKey声明和main函数的定义]
 }
 
 main().catch((error) => {
