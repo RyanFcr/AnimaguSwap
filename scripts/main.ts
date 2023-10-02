@@ -14,6 +14,7 @@ import { stringToHex } from "./utils"
 import { ec } from "elliptic"
 import * as EthCrypto from "eth-crypto"
 import sss from "shamirs-secret-sharing"
+import { toUtf8Bytes } from "ethers"
 
 const curve = new ec("secp256k1")
 async function main() {
@@ -221,6 +222,9 @@ async function runSystem(
     // console.log(txb)
     const txbAsString = JSON.stringify(txb)
     console.log("txbAsString:", txbAsString)
+    const commitment = ethers.keccak256(
+        ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify(txb))),
+    )
 
     // Stage2: transaction submission
     const V = randomBit()
@@ -385,6 +389,7 @@ async function runSystem(
         const commitTx = await animaguSwapContractWithUserWallet.commit(
             "0x" + hashedRoot,
             hashedWV,
+            commitment,
         )
         await commitTx.wait()
 

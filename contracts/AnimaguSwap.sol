@@ -24,6 +24,14 @@ contract AnimaguSwap is IAnimaguSwap {
 
     // 新增一个状态变量用于存储所有的shares
     string[] public sharesArray;
+    // struct Commitment {
+    //     address user;
+    //     bytes32 commitHash;
+    // }
+    // uint256 public commitCounter = 0;
+    // mapping(uint256 => Commitment) public commits;
+    // commitment队列控制交易的顺序
+    bytes32[] public commitments;
 
     // 合约不应该知道谁是user
     constructor() {}
@@ -39,10 +47,12 @@ contract AnimaguSwap is IAnimaguSwap {
 
     function commit(
         bytes32 hashTx,
-        bytes32 hashWV
+        bytes32 hashWV,
+        bytes32 commitment
     ) external override returns (bool) {
         _commitTx = hashTx;
         _commitWV = hashWV;
+        commitments.push(commitment);
         return true;
     }
 
@@ -81,6 +91,13 @@ contract AnimaguSwap is IAnimaguSwap {
                 // 执行交易
                 // ...
                 string memory secret = recoverSecret(sharesArray);
+                bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
+                bytes32 _commitment = commitments[0];
+                if (recoveredHash == _commitment) {
+                    commitments.pop();
+                    // Here, execute the transaction as the hashes match.
+                    // TODO: Add your transaction execution logic here
+                }
             }
         } else {
             deposits[msg.sender] = 0; // Burn the deposit
