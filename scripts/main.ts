@@ -9,9 +9,12 @@ import { BUY, SELL } from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
 import { concatenateNumbers } from "./concatenateUtils"
 import { randomBit } from "./randomUtils"
+import { additiveSecretSharing } from "./additiveSecretSharing"
+import { stringToHex } from "./utils"
 import { ec } from "elliptic"
 import * as EthCrypto from "eth-crypto"
 import sss from "shamirs-secret-sharing"
+
 const curve = new ec("secp256k1")
 async function main() {
     // Initialization 初始化
@@ -245,15 +248,22 @@ async function main() {
         // const shares = secrets.share(secrets.str2hex(txbAsString), N, N) // Splitting into N shares with N required to reconstruct
         // // 在每个share前加上“0x”
 
-        const secretBuffer = Buffer.from(txbAsString, "utf8")
-        const shares = sss.split(secretBuffer, {
-            shares: N,
-            threshold: N,
-        })
+        // const secretBuffer = Buffer.from(txbAsString, "utf8")
+        // const shares = sss.split(secretBuffer, {
+        //     shares: N,
+        //     threshold: N,
+        // })
+        const hexTxbAsSrting = stringToHex(txbAsString)
+        const secretNumber = BigInt("0x" + hexTxbAsSrting) // 将秘密转换为bigint
+        const FIELD_SIZE = BigInt(
+            "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        ) // 例如：使用2^256-1作为有限域的大小
+
+        const shares = additiveSecretSharing(secretNumber, N, FIELD_SIZE)
         // const shares = sharesBuffers.map((shareBuffer: string) =>
         //     shareBuffer.toString("hex"),
         // )
-
+        console.log("shares:", shares)
         const prefixedShares = shares.map((share: string) => "0x" + share)
 
         // // 使用 prefixedShares 创建 Merkle 树
@@ -366,6 +376,13 @@ async function main() {
             ANIMAGUSWAP_ABI,
             flipperWallet,
         )
+        const balance = await provider.getBalance(flipperWallet.address)
+        if (Number(balance) === 0) {
+            console.error(
+                "Flipper wallet has no ether. You need to fund it first.",
+            )
+            return
+        }
 
         const flipperRevealedListener = (flipper: any, success: any) => {
             console.log(
@@ -379,8 +396,14 @@ async function main() {
         flipperContract.on("FlipperRevealed", flipperRevealedListener)
 
         let flipperB = decryptedMessage[0]
-        const flipperRevealTx = await flipperContract.revealFlipper(flipperB)
-        await flipperRevealTx.wait()
+        try {
+            const flipperRevealTx = await flipperContract.revealFlipper(
+                flipperB,
+            )
+            await flipperRevealTx.wait()
+        } catch (error) {
+            console.error("Error when trying to reveal flipper:", error)
+        }
 
         const stakerContractInstance = new ethers.Contract(
             ANIMAGUSWAP_ADDRESS,
@@ -411,6 +434,7 @@ async function main() {
             const stakerRevealTx = await stakerContract.revealStaker(
                 "0x" + stakerData[index].share,
                 stakerData[index].proof,
+                N,
             )
             await stakerRevealTx.wait()
         }

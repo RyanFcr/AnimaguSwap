@@ -93,10 +93,6 @@ contract AnimaguSwap is IAnimaguSwap {
             deposits[msg.sender] > 0,
             "Only flipper with deposit can reveal"
         );
-        require(
-            deposits[msg.sender] > 0,
-            "Only flipper with deposit can reveal"
-        );
 
         revealedB = _b; // 将输入的b存储到状态变量中
         emit FlipperRevealed(msg.sender, true);
