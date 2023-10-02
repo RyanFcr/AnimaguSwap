@@ -17,6 +17,7 @@ import sss from "shamirs-secret-sharing"
 
 const curve = new ec("secp256k1")
 async function main() {
+    // Initialization 初始化
     const stakerWallets: any[] = []
     const N = 2 // N is the number of stakers
     const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
@@ -34,28 +35,6 @@ async function main() {
         console.error("Private key not found in .env file")
         return
     }
-
-    await runSystem(
-        userPrivateKey,
-        stakerWallets,
-        N,
-        provider,
-        flipperPrivateKey,
-    )
-}
-
-async function runSystem(
-    userPrivateKey: string,
-    stakerWallets: any[],
-    N: number,
-    provider: any,
-    flipperPrivateKey: any,
-) {
-    // Initialization 初始化
-
-    const userWallet = new ethers.Wallet(userPrivateKey, provider)
-    const flipperWallet = new ethers.Wallet(flipperPrivateKey, provider)
-
     // 0 is the flipper
     // 1, 2, 3, ... are the stakers
     // 这个本来不是整个系统的一部分，但是一开始staker和flipper都没钱，所以有了这一步让转点钱给
@@ -88,6 +67,25 @@ async function runSystem(
         //         ).toFixed(8)}`,
         //     )
     }
+
+    await runSystem(
+        userPrivateKey,
+        stakerWallets,
+        N,
+        provider,
+        flipperPrivateKey,
+    )
+}
+
+async function runSystem(
+    userPrivateKey: string,
+    stakerWallets: any[],
+    N: number,
+    provider: any,
+    flipperPrivateKey: any,
+) {
+    const userWallet = new ethers.Wallet(userPrivateKey, provider)
+    const flipperWallet = new ethers.Wallet(flipperPrivateKey, provider)
 
     const contractArtifactPath = path.join(
         __dirname,
