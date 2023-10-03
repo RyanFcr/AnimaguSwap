@@ -159,7 +159,7 @@ async function runSystem(
 
     // Stage 1: transaction creation
     const UNI_ADDRESS = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
-    const UNI_ABI = JSON.parse(fs.readFileSync("./abis/erc20.json").toString())
+    // const UNI_ABI = JSON.parse(fs.readFileSync("./abis/erc20.json").toString())
     // const UNI_CONTRACT = new ethers.Contract(UNI_ADDRESS, UNI_ABI, userWallet)
 
     const WETH_SEPOLIA_ADDRESS = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"

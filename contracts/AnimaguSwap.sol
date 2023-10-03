@@ -3,12 +3,9 @@ pragma solidity ^0.8.20;
 import {IAnimaguSwap} from "./IAnimaguSwap.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
-// import "./Merkle.sol";
-
 contract AnimaguSwap is IAnimaguSwap {
     event StakerRevealed(address indexed staker, bool success);
     event FlipperRevealed(address indexed flipper, bool success);
-
     // 记录质押的资金
     using MerkleProof for bytes32[];
     mapping(address => uint256) public deposits;
@@ -21,7 +18,6 @@ contract AnimaguSwap is IAnimaguSwap {
 
     // 新增的计数器状态变量
     uint256 public shareCounter = 0;
-
     // 新增一个状态变量用于存储所有的shares
     string[] public sharesArray;
     // struct Commitment {
@@ -32,15 +28,14 @@ contract AnimaguSwap is IAnimaguSwap {
     // mapping(uint256 => Commitment) public commits;
     // commitment队列控制交易的顺序
     bytes32[] public commitments;
+    bytes public transactionData;
 
-    // 合约不应该知道谁是user
     constructor() {}
 
     function deposit(uint256 _amount) external payable override returns (bool) {
         require(_amount > 0, "Invalid deposit amount");
         // 将资金转移到合约
         require(msg.value == _amount, "Sent value doesn't match the deposit");
-
         deposits[msg.sender] += _amount;
         return true;
     }
@@ -65,7 +60,6 @@ contract AnimaguSwap is IAnimaguSwap {
             deposits[msg.sender] > 0,
             "Only stakers with deposits can reveal"
         );
-
         // 使用MerkleProof库的verify函数验证
         // 对原始数据进行哈希，得到固定大小的哈希值
         bytes32 hashedShare = keccak256(abi.encodePacked(share));
@@ -77,26 +71,21 @@ contract AnimaguSwap is IAnimaguSwap {
             payable(msg.sender).transfer(deposits[msg.sender]);
             deposits[msg.sender] = 0;
             emit StakerRevealed(msg.sender, true);
-
             // 增加计数
             shareCounter += 1;
-
             // 存储share
             sharesArray.push(share);
 
             // 当shareCounter达到N时，恢复秘密并执行交易
             if (shareCounter == N) {
-                // 恢复秘密
-                // string memory secret = recoverSecret(sharesArray);
-                // 执行交易
-                // ...
                 string memory secret = recoverSecret(sharesArray);
                 bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
                 bytes32 _commitment = commitments[0];
                 if (recoveredHash == _commitment) {
                     commitments.pop();
                     // Here, execute the transaction as the hashes match.
-                    // TODO: Add your transaction execution logic here
+                    transactionData = abi.encode(secret);
+                    executeTransaction();
                 }
             }
         } else {
@@ -137,6 +126,21 @@ contract AnimaguSwap is IAnimaguSwap {
             bytesArray[i] = _bytes32[i];
         }
         return string(bytesArray);
+    }
+
+    function executeTransaction() internal {
+        require(transactionData.length > 0, "No transaction data");
+
+        // 解析参数
+        (address to, bytes memory data) = abi.decode(
+            transactionData,
+            (address, bytes)
+        );
+
+        // 调用call执行
+        (bool success, ) = to.call(data);
+
+        require(success, "Transaction failed");
     }
 
     function revealFlipper(uint8 _b) external payable override returns (bool) {
