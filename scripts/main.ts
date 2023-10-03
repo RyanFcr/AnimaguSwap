@@ -3,6 +3,7 @@ import * as fs from "fs"
 import * as path from "path"
 import { readFileSync } from "fs"
 // import * as secrets from "secrets.js-grempe"
+// import sss from "shamirs-secret-sharing"
 import { MerkleTree } from "merkletreejs"
 import { keccak256 } from "js-sha3"
 import { buildBuyTx, buildSellTx } from "./uniswapAction"
@@ -10,11 +11,8 @@ import { signedMessage, verifySignature } from "./signatureUtils"
 import { concatenateNumbers } from "./concatenateUtils"
 import { randomBit } from "./randomUtils"
 import { additiveSecretSharing } from "./additiveSecretSharing"
-import { stringToHex } from "./utils"
 import { ec } from "elliptic"
 import * as EthCrypto from "eth-crypto"
-import sss from "shamirs-secret-sharing"
-import { toUtf8Bytes } from "ethers"
 
 const curve = new ec("secp256k1")
 async function main() {
@@ -36,6 +34,7 @@ async function main() {
         console.error("Private key not found in .env file")
         return
     }
+    const userWallet = new ethers.Wallet(userPrivateKey, provider)
     // 0 is the flipper
     // 1, 2, 3, ... are the stakers
     // 这个本来不是整个系统的一部分，但是一开始staker和flipper都没钱，所以有了这一步让转点钱给
@@ -55,18 +54,18 @@ async function main() {
                 privateKey: wallet.privateKey,
             })
         }
-        //     const amountToSend = ethers.parseEther("0.01") // 0.01 ETH in wei
-        //     const tx = await userWallet.sendTransaction({
-        //         to: wallet.address,
-        //         value: amountToSend,
-        //     })
-        //     await tx.wait() // Wait for the transaction to be mined
-        //     let balance = await provider.getBalance(wallet.address)
-        //     console.log(
-        //         `Staker ${i} balance: ${parseFloat(
-        //             ethers.formatEther(balance),
-        //         ).toFixed(8)}`,
-        //     )
+        // const amountToSend = ethers.parseEther("0.1") // 0.01 ETH in wei
+        // const tx = await userWallet.sendTransaction({
+        //     to: wallet.address,
+        //     value: amountToSend,
+        // })
+        // await tx.wait() // Wait for the transaction to be mined
+        // let balance = await provider.getBalance(wallet.address)
+        // console.log(
+        //     `Staker ${i} balance: ${parseFloat(
+        //         ethers.formatEther(balance),
+        //     ).toFixed(8)}`,
+        // )
     }
 
     await runSystem(
@@ -99,7 +98,7 @@ async function runSystem(
     const ANIMAGUSWAP_ADDRESS = fs
         .readFileSync("./output/AnimaguSwapAddress.txt")
         .toString() // 你应该从deploy脚本中动态获取这个地址。
-    const depositAmount = ethers.parseEther("0.01") // or the amount you want to deposit
+    const depositAmount = ethers.parseEther("0.001") // or the amount you want to deposit
     const animaguSwapContractWithUserWallet = new ethers.Contract(
         ANIMAGUSWAP_ADDRESS,
         ANIMAGUSWAP_ABI,
@@ -216,11 +215,12 @@ async function runSystem(
     // console.log(tx)
     // console.log(txb)
     const txbAsString = JSON.stringify(txb)
+    const hexTxbAsString = ethers.hexlify(ethers.toUtf8Bytes(txbAsString))
     console.log("txbAsString:", txbAsString)
-    const commitment = ethers.keccak256(
-        ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify(txb))),
-    )
-
+    // console.log("toUtf8Bytes:txbAsString", ethers.toUtf8Bytes(txbAsString))
+    console.log("hexlify:txbAsString", hexTxbAsString)
+    const commitment = ethers.keccak256(hexTxbAsString)
+    console.log("commitment:", commitment) //16进制
     // Stage2: transaction submission
     const V = randomBit()
     const message = concatenateNumbers(B, V)
@@ -260,41 +260,25 @@ async function runSystem(
     // Merkle Tree
     if (verifySignatureResult) {
         console.log("Signature verified!")
-        // 分割 txb (assuming it's a string of the tx hash)
-        // const shares = secrets.share(secrets.str2hex(txbAsString), N, N) // Splitting into N shares with N required to reconstruct
-        // // 在每个share前加上“0x”
-
-        // const secretBuffer = Buffer.from(txbAsString, "utf8")
-        // const shares = sss.split(secretBuffer, {
-        //     shares: N,
-        //     threshold: N,
-        // })
-        const hexTxbAsString = stringToHex(txbAsString)
-        console.log("hexTxbAsString", hexTxbAsString)
-        const secretNumber = BigInt("0x" + hexTxbAsString) // 将秘密转换为bigint
-        const FIELD_SIZE = BigInt(
-            "115792089237316195423570985008687907853269984665640564039457584007913129639935",
-        ) // 例如：使用2^256-1作为有限域的大小
-
-        const shares = additiveSecretSharing(secretNumber, N, FIELD_SIZE)
-        // const shares = sharesBuffers.map((shareBuffer: string) =>
-        //     shareBuffer.toString("hex"),
-        // )
+        const secretNumber = BigInt(hexTxbAsString) // 将秘密转换为bigint,10进制
+        console.log("secretNumber:", secretNumber)
+        const secretLength = secretNumber.toString().length
+        const FIELD_SIZE = BigInt("1" + "0".repeat(secretLength))
+        // console.log("FIELD_SIZE:", FIELD_SIZE)
+        const shares = additiveSecretSharing(secretNumber, N, FIELD_SIZE) //shares都转换成16进制的string,前面加0x
         console.log("shares:", shares)
-        const prefixedShares = shares.map((share: string) => "0x" + share)
 
-        // // 使用 prefixedShares 创建 Merkle 树
-        const hashedShares = prefixedShares.map((share: string) =>
+        const hashedShares = shares.map((share: string) =>
             ethers.keccak256(ethers.toUtf8Bytes(share)),
         )
         console.log("hashedShares:", hashedShares)
         const tree = new MerkleTree(shares, keccak256, { sort: true })
-        const root = tree.getRoot().toString("hex")
+        const root = "0x" + tree.getRoot().toString("hex")
 
         const hashedTree = new MerkleTree(hashedShares, keccak256, {
             sort: true,
         })
-        const hashedRoot = hashedTree.getRoot().toString("hex")
+        const hashedRoot = "0x" + hashedTree.getRoot().toString("hex")
         console.log("root:", root)
         console.log("hashedRoot:", hashedRoot)
 
@@ -353,7 +337,7 @@ async function runSystem(
         // staker verify whether user cheats or not
         for (let index = 0; index < N; index++) {
             const hashedShare = ethers.keccak256(
-                ethers.toUtf8Bytes("0x" + stakerData[index].share),
+                ethers.toUtf8Bytes(stakerData[index].share),
             )
             const isValidProof = tree.verify(
                 stakerData[index].proof, // proof for the encryptedShare
@@ -382,7 +366,7 @@ async function runSystem(
         // console.log("hashedMerkleRoot:", hashedRoot)
         // 调用commit函数
         const commitTx = await animaguSwapContractWithUserWallet.commit(
-            "0x" + hashedRoot,
+            hashedRoot,
             hashedWV,
             commitment,
         )
@@ -433,6 +417,9 @@ async function runSystem(
                 `Staker ${staker} reveal ${success ? "successful" : "failed"}`,
             )
         })
+        // stakerContractInstance.on("SecretRecovered", (recoveredSecret) => {
+        //     console.log(`Secret was recovered: ${recoveredSecret}`)
+        // })
         for (let index = 0; index < N; index++) {
             const privateKey = process.env[`PRIVATE_KEY_${index + 1}`]
             if (!privateKey) {
@@ -450,7 +437,7 @@ async function runSystem(
                 stakerWallet,
             )
             const stakerRevealTx = await stakerContract.revealStaker(
-                "0x" + stakerData[index].share,
+                stakerData[index].share,
                 stakerData[index].proof,
                 N,
             )

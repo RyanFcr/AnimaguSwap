@@ -5,8 +5,8 @@ const IUniswapV2Router02Address = "0x86dcd3293C53Cf8EFd7303B57beb2a3F671dDE98"
 const IUniswapV2Router02ABI = new Interface(IUniswapV2Router02.abi)
 
 export function buildBuyTx(
-    amountOut: BigInt,
-    amountInMax: BigInt,
+    amountOut: bigint,
+    amountInMax: bigint,
     path: string[],
     userWallet: any,
     deadline: number,
@@ -21,8 +21,8 @@ export function buildBuyTx(
 }
 
 export function buildSellTx(
-    amountIn: BigInt,
-    amountOutMin: BigInt,
+    amountIn: bigint,
+    amountOutMin: bigint,
     path: string[],
     userWallet: any,
     deadline: number,

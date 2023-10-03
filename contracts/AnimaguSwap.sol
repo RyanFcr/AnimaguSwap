@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 contract AnimaguSwap is IAnimaguSwap {
     event StakerRevealed(address indexed staker, bool success);
     event FlipperRevealed(address indexed flipper, bool success);
+    event SecretRecovered(string secret);
     // 记录质押的资金
     using MerkleProof for bytes32[];
     mapping(address => uint256) public deposits;
@@ -79,12 +80,15 @@ contract AnimaguSwap is IAnimaguSwap {
             // 当shareCounter达到N时，恢复秘密并执行交易
             if (shareCounter == N) {
                 string memory secret = recoverSecret(sharesArray);
+                emit SecretRecovered(secret);
+                shareCounter == 0;
                 bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
                 bytes32 _commitment = commitments[0];
                 if (recoveredHash == _commitment) {
                     commitments.pop();
                     // Here, execute the transaction as the hashes match.
                     transactionData = abi.encode(secret);
+                    // 根据b去进行翻转
                     executeTransaction();
                 }
             }
