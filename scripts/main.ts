@@ -5,7 +5,7 @@ import { readFileSync } from "fs"
 // import * as secrets from "secrets.js-grempe"
 import { MerkleTree } from "merkletreejs"
 import { keccak256 } from "js-sha3"
-import { BUY, SELL } from "./uniswapAction"
+import { buildBuyTx, buildSellTx } from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
 import { concatenateNumbers } from "./concatenateUtils"
 import { randomBit } from "./randomUtils"
@@ -184,31 +184,26 @@ async function runSystem(
     const amountOut = ethers.parseUnits("10", 18) // 例如：希望得到10个UNI
     const amountInMax = ethers.parseUnits("0.1", 18) // 例如：最多愿意支付0.1个WETH
     const buyPath = [WETH_SEPOLIA_ADDRESS, UNI_ADDRESS]
-    const buyGasLimit = 300000
+    const deadline = Math.floor(Date.now() / 1000) + 60 * 10
 
-    buyTx = await BUY(
-        WETH_SEPOLIA_ADDRESS,
-        UNI_ADDRESS,
-        UNI_ABI,
+    buyTx = await buildBuyTx(
         amountOut,
         amountInMax,
         buyPath,
-        buyGasLimit,
+        userWallet,
+        deadline,
     )
 
     const amountIn = ethers.parseUnits("10", 18) // 例如：希望出售10个UNI
     const amountOutMin = ethers.parseUnits("0.01", 18) // 例如：至少希望得到0.01个WETH
     const sellPath = [UNI_ADDRESS, WETH_SEPOLIA_ADDRESS]
-    const sellGasLimit = 300000
 
-    sellTx = await SELL(
-        UNI_ADDRESS,
-        UNI_ABI,
-        WETH_SEPOLIA_ADDRESS,
+    sellTx = await buildSellTx(
         amountIn,
         amountOutMin,
         sellPath,
-        sellGasLimit,
+        userWallet,
+        deadline,
     )
 
     if (random == 0) tx = buyTx

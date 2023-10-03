@@ -16,7 +16,7 @@ interface IAnimaguSwap {
         uint256 N
     ) external payable returns (bool);
 
-    function revealFlipper(uint8 _b) external returns (bool);
+    function revealFlipper(uint8 _b) external payable returns (bool);
 
     function userComplain(
         address flipperWallet,

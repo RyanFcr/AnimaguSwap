@@ -139,13 +139,15 @@ contract AnimaguSwap is IAnimaguSwap {
         return string(bytesArray);
     }
 
-    function revealFlipper(uint8 _b) external override returns (bool) {
+    function revealFlipper(uint8 _b) external payable override returns (bool) {
         require(
             deposits[msg.sender] > 0,
             "Only flipper with deposit can reveal"
         );
 
         revealedB = _b; // 将输入的b存储到状态变量中
+        payable(msg.sender).transfer(deposits[msg.sender]);
+        deposits[msg.sender] = 0;
         emit FlipperRevealed(msg.sender, true);
         return true;
     }
