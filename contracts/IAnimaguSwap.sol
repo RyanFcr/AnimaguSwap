@@ -12,8 +12,7 @@ interface IAnimaguSwap {
 
     function revealStaker(
         string memory share,
-        bytes32[] memory proof,
-        uint256 N
+        bytes32[] memory proof
     ) external payable returns (bool);
 
     function revealFlipper(uint8 _b) external payable returns (bool);
@@ -24,4 +23,6 @@ interface IAnimaguSwap {
         uint8 V,
         uint8 W
     ) external payable returns (bool);
+
+    function recoverAndExecute() external;
 }

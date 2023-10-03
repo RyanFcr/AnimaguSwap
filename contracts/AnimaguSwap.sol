@@ -7,6 +7,7 @@ contract AnimaguSwap is IAnimaguSwap {
     event StakerRevealed(address indexed staker, bool success);
     event FlipperRevealed(address indexed flipper, bool success);
     event SecretRecovered(string secret);
+    event DebugUintArray(uint256[] value);
     // 记录质押的资金
     using MerkleProof for bytes32[];
     mapping(address => uint256) public deposits;
@@ -54,8 +55,7 @@ contract AnimaguSwap is IAnimaguSwap {
 
     function revealStaker(
         string memory share,
-        bytes32[] memory proof,
-        uint256 N
+        bytes32[] memory proof
     ) external payable override returns (bool) {
         require(
             deposits[msg.sender] > 0,
@@ -76,22 +76,6 @@ contract AnimaguSwap is IAnimaguSwap {
             shareCounter += 1;
             // 存储share
             sharesArray.push(share);
-
-            // 当shareCounter达到N时，恢复秘密并执行交易
-            if (shareCounter == N) {
-                string memory secret = recoverSecret(sharesArray);
-                emit SecretRecovered(secret);
-                shareCounter == 0;
-                bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
-                bytes32 _commitment = commitments[0];
-                if (recoveredHash == _commitment) {
-                    commitments.pop();
-                    // Here, execute the transaction as the hashes match.
-                    transactionData = abi.encode(secret);
-                    // 根据b去进行翻转
-                    executeTransaction();
-                }
-            }
         } else {
             deposits[msg.sender] = 0; // Burn the deposit
             emit StakerRevealed(msg.sender, false);
@@ -99,37 +83,134 @@ contract AnimaguSwap is IAnimaguSwap {
         return true;
     }
 
+    function recoverAndExecute() external override {
+        string memory secret = recoverSecret(sharesArray);
+        emit SecretRecovered(secret);
+        shareCounter = 0; // Note: You had '==' instead of '=', I corrected it.
+        bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
+        bytes32 _commitment = commitments[0];
+        if (recoveredHash == _commitment) {
+            commitments.pop();
+            // Here, execute the transaction as the hashes match.
+            transactionData = abi.encode(secret);
+            // 根据b去进行翻转
+            executeTransaction();
+        }
+    }
+
     function recoverSecret(
         string[] memory shares
-    ) internal pure returns (string memory) {
-        uint256 sum = 0;
-        for (uint256 i = 0; i < shares.length; i++) {
-            uint256 shareValue = uint256(bytesToBytes32(bytes(shares[i])));
-            sum += shareValue;
+    ) public pure returns (string memory) {
+        uint256[] memory sum = parseHexStringToBigInt(shares[0]);
+        // emit DebugEvent("Value of sum is:", sum.segments[0]);
+
+        for (uint256 i = 1; i < shares.length; i++) {
+            uint256[] memory nextValue = parseHexStringToBigInt(shares[i]);
+            sum = addBigInts(sum, nextValue);
         }
-        return bytes32ToString(bytes32(sum));
+
+        return bigIntToHexString(sum);
     }
 
-    function bytesToBytes32(bytes memory b) internal pure returns (bytes32) {
-        bytes32 out;
-        for (uint i = 0; i < 32; i++) {
-            out |= bytes32(b[i] & 0xFF) >> (i * 8);
+    function substring(
+        string memory str,
+        uint startIndex,
+        uint endIndex
+    ) public pure returns (string memory) {
+        bytes memory strBytes = bytes(str);
+        bytes memory result = new bytes(endIndex - startIndex);
+        for (uint i = startIndex; i < endIndex; i++) {
+            result[i - startIndex] = strBytes[i];
         }
-        return out;
+        return string(result);
     }
 
-    function bytes32ToString(
-        bytes32 _bytes32
-    ) internal pure returns (string memory) {
-        uint8 i = 0;
-        while (i < 32 && _bytes32[i] != 0) {
-            i++;
+    function parseHexStringToBigInt(
+        string memory s
+    ) public pure returns (uint256[] memory) {
+        bytes memory b = bytes(substring(s, 2, bytes(s).length));
+        uint256 current = 0;
+        uint256 segmentIndex = 0;
+        uint256[] memory result;
+
+        // Initialize segments
+        uint256 segmentCount = (b.length + 63) / 64;
+        result = new uint256[](segmentCount);
+
+        for (uint i = 0; i < b.length; i++) {
+            uint8 tmp = uint8(b[i]);
+            if (tmp >= 48 && tmp <= 57) {
+                current = current * 16 + (tmp - 48);
+            } else if (tmp >= 97 && tmp <= 102) {
+                current = current * 16 + (tmp - 87);
+            } else if (tmp >= 65 && tmp <= 70) {
+                current = current * 16 + (tmp - 55);
+            }
+
+            if ((i + 1) % 64 == 0) {
+                result[segmentIndex] = current;
+                segmentIndex++;
+                current = 0;
+            }
         }
-        bytes memory bytesArray = new bytes(i);
-        for (i = 0; i < 32 && _bytes32[i] != 0; i++) {
-            bytesArray[i] = _bytes32[i];
+
+        if (b.length % 64 != 0) {
+            result[segmentIndex] = current;
         }
-        return string(bytesArray);
+        return result;
+    }
+
+    function addBigInts(
+        uint256[] memory a,
+        uint256[] memory b
+    ) public pure returns (uint256[] memory) {
+        uint256 maxLength = a.length > b.length ? a.length : b.length;
+        uint256[] memory result;
+        result = new uint256[](maxLength);
+        uint256 carry = 0;
+
+        for (uint256 i = 0; i < maxLength; i++) {
+            uint256 segmentA = i < a.length ? a[i] : 0;
+            uint256 segmentB = i < b.length ? b[i] : 0;
+            uint256 sum = segmentA + segmentB + carry;
+            result[i] = sum;
+            if (sum < segmentA || sum < segmentB) {
+                carry = 1;
+            } else {
+                carry = 0;
+            }
+        }
+        return result;
+    }
+
+    function bigIntToHexString(
+        uint256[] memory x
+    ) public pure returns (string memory) {
+        // Adjust the size of the byte array to account for the "0x" prefix
+        bytes memory b = new bytes(x.length * 64 + 2);
+
+        // Set the "0x" prefix
+        b[0] = bytes1(uint8(48)); // ASCII for "0"
+        b[1] = bytes1(uint8(120)); // ASCII for "x"
+
+        for (
+            uint256 segmentIndex = 0;
+            segmentIndex < x.length;
+            segmentIndex++
+        ) {
+            uint256 current = x[segmentIndex];
+            for (uint i = 0; i < 64; i++) {
+                uint8 tmp = uint8(current & 0xF);
+                if (tmp < 10) {
+                    b[65 - i + segmentIndex * 64] = bytes1(uint8(tmp + 48));
+                } else {
+                    b[65 - i + segmentIndex * 64] = bytes1(uint8(tmp + 87));
+                }
+                current = current >> 4;
+            }
+        }
+
+        return string(b);
     }
 
     function executeTransaction() internal {
