@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 import {IAnimaguSwap} from "./IAnimaguSwap.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "hardhat/console.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract AnimaguSwap is IAnimaguSwap {
     event StakerRevealed(address indexed staker, bool success);
@@ -54,6 +55,19 @@ contract AnimaguSwap is IAnimaguSwap {
         return true;
     }
 
+    function revealFlipper(uint8 _b) external payable override returns (bool) {
+        require(
+            deposits[msg.sender] > 0,
+            "Only flipper with deposit can reveal"
+        );
+
+        revealedB = _b; // 将输入的b存储到状态变量中
+        payable(msg.sender).transfer(deposits[msg.sender]);
+        deposits[msg.sender] = 0;
+        emit FlipperRevealed(msg.sender, true);
+        return true;
+    }
+
     function revealStaker(
         //随着staker的增加，gas fee也在增加
         string memory share,
@@ -86,14 +100,18 @@ contract AnimaguSwap is IAnimaguSwap {
     }
 
     function recoverAndExecute() external override {
-        string memory secret = recoverSecret(sharesArray);
+        string memory secret = removeLeadingZerosFromSecondPosition(
+            recoverSecret(sharesArray)
+        );
         console.log("secret is %s\n", secret);
         emit SecretRecovered(secret);
         shareCounter = 0;
         bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
+        // console.log(string(abi.encodePacked(recoveredHash)));
         bytes32 _commitment = commitments[0];
         if (recoveredHash == _commitment) {
             commitments.pop();
+            console.log("1");
             // Here, execute the transaction as the hashes match.
             transactionData = abi.encode(secret);
             // 根据b去进行翻转
@@ -101,9 +119,24 @@ contract AnimaguSwap is IAnimaguSwap {
         }
     }
 
+    function executeTransaction() internal {
+        require(transactionData.length > 0, "No transaction data");
+
+        // 解析参数
+        (address to, bytes memory data) = abi.decode(
+            transactionData,
+            (address, bytes)
+        );
+
+        // 调用call执行
+        (bool success, ) = to.call(data);
+
+        require(success, "Transaction failed");
+    }
+
     function recoverSecret(
         string[] memory shares
-    ) public pure returns (string memory) {
+    ) internal pure returns (string memory) {
         uint256[] memory sum = parseHexStringToBigInt(shares[0]); //with 0x
         // emit DebugEvent("Value of sum is:", sum.segments[0]);
         console.log("Value of sum is:\n", sum[0]);
@@ -115,71 +148,65 @@ contract AnimaguSwap is IAnimaguSwap {
         return bigIntToHexString(sum);
     }
 
-    // function substring(
-    //     string memory str,
-    //     uint startIndex,
-    //     uint endIndex
-    // ) public pure returns (string memory) {
-    //     bytes memory strBytes = bytes(str);
-    //     bytes memory result = new bytes(endIndex - startIndex);
-    //     for (uint i = startIndex; i < endIndex; i++) {
-    //         result[i - startIndex] = strBytes[i];
-    //     }
-    //     return string(result);
-    // }
-
     function parseHexStringToBigInt(
         string memory s
-    ) public pure returns (uint256[] memory) {
+    ) internal pure returns (uint256[] memory) {
+        // 使用SafeMath进行安全的数学操作
+        // using SafeMath for uint256;
+
         bytes memory b = bytes(s);
         uint256 current = 0;
         uint256 segmentIndex = 0;
-        uint256[] memory result;
 
-        // Initialize segments
+        // 初始化segments
         uint256 segmentCount = (b.length + 63 - 2) / 64;
-        result = new uint256[](segmentCount);
+        uint256[] memory result = new uint256[](segmentCount);
+        uint i = b.length - 1;
+        uint charCount = 0; // 已经解析的字符计数
 
-        for (uint i = 2; i < b.length; i++) {
+        while (i >= 2) {
             uint8 tmp = uint8(b[i]);
+            uint256 value = 0;
+
             if (tmp >= 48 && tmp <= 57) {
-                current = current * 16 + (tmp - 48);
+                value = tmp - 48;
             } else if (tmp >= 97 && tmp <= 102) {
-                current = current * 16 + (tmp - 87);
+                value = tmp - 97 + 10;
             } else if (tmp >= 65 && tmp <= 70) {
-                current = current * 16 + (tmp - 55);
+                value = tmp - 65 + 10;
             }
 
-            if ((i - 1) % 64 == 0) {
+            // 通过位移操作替代pow函数
+            current |= value << (charCount * 4);
+            charCount++;
+
+            if (charCount == 64 || i == 2) {
+                // 当我们解析了64个字符或到达字符串的开始时，保存当前的数值
                 result[segmentIndex] = current;
                 console.log("result is %s\n", result[segmentIndex]);
                 segmentIndex++;
                 current = 0;
+                charCount = 0;
             }
+
+            if (i == 2) break; // 因为我们使用了 uint，所以需要这样来判断
+            i--;
         }
-
-        if ((b.length - 2) % 64 != 0) {
-            result[segmentIndex] = current;
-
-            console.log("result is %s\n", result[segmentIndex]);
-        }
-
         return result;
-        // return abi.encode(1);
     }
 
     function addBigInts(
         uint256[] memory a,
         uint256[] memory b
-    ) public pure returns (uint256[] memory) {
+    ) internal pure returns (uint256[] memory) {
         uint256 maxLength = a.length > b.length ? a.length : b.length; //如果长度相等，又有carry，需要maxLength+1
         uint256[] memory result;
         result = new uint256[](maxLength);
         uint256 carry = 0;
 
         for (uint256 i = 0; i < maxLength; i++) {
-            uint256 segmentA = i < a.length ? a[a.length - 1 - i] : 0;
-            uint256 segmentB = i < b.length ? b[b.length - 1 - i] : 0;
+            uint256 segmentA = i < a.length ? a[i] : 0;
+            uint256 segmentB = i < b.length ? b[i] : 0;
             unchecked {
                 uint256 sum = segmentA + segmentB + carry;
                 result[maxLength - i - 1] = sum;
@@ -190,13 +217,12 @@ contract AnimaguSwap is IAnimaguSwap {
                 }
             }
         }
-        console.log("result is %s\n", result[0]);
         return result;
     }
 
     function bigIntToHexString(
         uint256[] memory x
-    ) public pure returns (string memory) {
+    ) internal pure returns (string memory) {
         // Adjust the size of the byte array to account for the "0x" prefix
         bytes memory b = new bytes(x.length * 64 + 2);
 
@@ -220,37 +246,45 @@ contract AnimaguSwap is IAnimaguSwap {
                 current = current >> 4;
             }
         }
-
-        console.log("result is %s\n", string(b));
         return string(b);
     }
 
-    function executeTransaction() internal {
-        require(transactionData.length > 0, "No transaction data");
+    function removeLeadingZerosFromSecondPosition(
+        string memory input
+    ) internal pure returns (string memory) {
+        bytes memory b = bytes(input);
 
-        // 解析参数
-        (address to, bytes memory data) = abi.decode(
-            transactionData,
-            (address, bytes)
+        // 如果长度小于2，直接返回
+        if (b.length < 2) {
+            return input;
+        }
+
+        uint startIndexOfZeros = 2;
+        uint endIndexOfZeros = 2;
+
+        // 找到从第二位开始的连续零的结束位置
+        while (endIndexOfZeros < b.length && b[endIndexOfZeros] == "0") {
+            endIndexOfZeros++;
+        }
+
+        // 如果没有找到连续的零，直接返回原字符串
+        if (endIndexOfZeros == startIndexOfZeros) {
+            return input;
+        }
+
+        // 构建一个新的字符串，没有连续的零
+        bytes memory result = new bytes(
+            b.length - (endIndexOfZeros - startIndexOfZeros)
         );
+        uint index = 0;
 
-        // 调用call执行
-        (bool success, ) = to.call(data);
-
-        require(success, "Transaction failed");
-    }
-
-    function revealFlipper(uint8 _b) external payable override returns (bool) {
-        require(
-            deposits[msg.sender] > 0,
-            "Only flipper with deposit can reveal"
-        );
-
-        revealedB = _b; // 将输入的b存储到状态变量中
-        payable(msg.sender).transfer(deposits[msg.sender]);
-        deposits[msg.sender] = 0;
-        emit FlipperRevealed(msg.sender, true);
-        return true;
+        for (uint i = 0; i < b.length; i++) {
+            if (i < startIndexOfZeros || i >= endIndexOfZeros) {
+                result[index] = b[i];
+                index++;
+            }
+        }
+        return string(result);
     }
 
     function userComplain(
