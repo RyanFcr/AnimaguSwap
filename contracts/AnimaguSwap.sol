@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 import {IAnimaguSwap} from "./IAnimaguSwap.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "hardhat/console.sol";
 
 contract AnimaguSwap is IAnimaguSwap {
     event StakerRevealed(address indexed staker, bool success);
@@ -54,6 +55,7 @@ contract AnimaguSwap is IAnimaguSwap {
     }
 
     function revealStaker(
+        //随着staker的增加，gas fee也在增加
         string memory share,
         bytes32[] memory proof
     ) external payable override returns (bool) {
@@ -85,8 +87,9 @@ contract AnimaguSwap is IAnimaguSwap {
 
     function recoverAndExecute() external override {
         string memory secret = recoverSecret(sharesArray);
+        console.log("secret is %s\n", secret);
         emit SecretRecovered(secret);
-        shareCounter = 0; // Note: You had '==' instead of '=', I corrected it.
+        shareCounter = 0;
         bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
         bytes32 _commitment = commitments[0];
         if (recoveredHash == _commitment) {
@@ -101,9 +104,9 @@ contract AnimaguSwap is IAnimaguSwap {
     function recoverSecret(
         string[] memory shares
     ) public pure returns (string memory) {
-        uint256[] memory sum = parseHexStringToBigInt(shares[0]);
+        uint256[] memory sum = parseHexStringToBigInt(shares[0]); //with 0x
         // emit DebugEvent("Value of sum is:", sum.segments[0]);
-
+        console.log("Value of sum is:\n", sum[0]);
         for (uint256 i = 1; i < shares.length; i++) {
             uint256[] memory nextValue = parseHexStringToBigInt(shares[i]);
             sum = addBigInts(sum, nextValue);
@@ -112,32 +115,32 @@ contract AnimaguSwap is IAnimaguSwap {
         return bigIntToHexString(sum);
     }
 
-    function substring(
-        string memory str,
-        uint startIndex,
-        uint endIndex
-    ) public pure returns (string memory) {
-        bytes memory strBytes = bytes(str);
-        bytes memory result = new bytes(endIndex - startIndex);
-        for (uint i = startIndex; i < endIndex; i++) {
-            result[i - startIndex] = strBytes[i];
-        }
-        return string(result);
-    }
+    // function substring(
+    //     string memory str,
+    //     uint startIndex,
+    //     uint endIndex
+    // ) public pure returns (string memory) {
+    //     bytes memory strBytes = bytes(str);
+    //     bytes memory result = new bytes(endIndex - startIndex);
+    //     for (uint i = startIndex; i < endIndex; i++) {
+    //         result[i - startIndex] = strBytes[i];
+    //     }
+    //     return string(result);
+    // }
 
     function parseHexStringToBigInt(
         string memory s
     ) public pure returns (uint256[] memory) {
-        bytes memory b = bytes(substring(s, 2, bytes(s).length));
+        bytes memory b = bytes(s);
         uint256 current = 0;
         uint256 segmentIndex = 0;
         uint256[] memory result;
 
         // Initialize segments
-        uint256 segmentCount = (b.length + 63) / 64;
+        uint256 segmentCount = (b.length + 63 - 2) / 64;
         result = new uint256[](segmentCount);
 
-        for (uint i = 0; i < b.length; i++) {
+        for (uint i = 2; i < b.length; i++) {
             uint8 tmp = uint8(b[i]);
             if (tmp >= 48 && tmp <= 57) {
                 current = current * 16 + (tmp - 48);
@@ -147,39 +150,47 @@ contract AnimaguSwap is IAnimaguSwap {
                 current = current * 16 + (tmp - 55);
             }
 
-            if ((i + 1) % 64 == 0) {
+            if ((i - 1) % 64 == 0) {
                 result[segmentIndex] = current;
+                console.log("result is %s\n", result[segmentIndex]);
                 segmentIndex++;
                 current = 0;
             }
         }
 
-        if (b.length % 64 != 0) {
+        if ((b.length - 2) % 64 != 0) {
             result[segmentIndex] = current;
+
+            console.log("result is %s\n", result[segmentIndex]);
         }
+
         return result;
+        // return abi.encode(1);
     }
 
     function addBigInts(
         uint256[] memory a,
         uint256[] memory b
     ) public pure returns (uint256[] memory) {
-        uint256 maxLength = a.length > b.length ? a.length : b.length;
+        uint256 maxLength = a.length > b.length ? a.length : b.length; //如果长度相等，又有carry，需要maxLength+1
         uint256[] memory result;
         result = new uint256[](maxLength);
         uint256 carry = 0;
 
         for (uint256 i = 0; i < maxLength; i++) {
-            uint256 segmentA = i < a.length ? a[i] : 0;
-            uint256 segmentB = i < b.length ? b[i] : 0;
-            uint256 sum = segmentA + segmentB + carry;
-            result[i] = sum;
-            if (sum < segmentA || sum < segmentB) {
-                carry = 1;
-            } else {
-                carry = 0;
+            uint256 segmentA = i < a.length ? a[a.length - 1 - i] : 0;
+            uint256 segmentB = i < b.length ? b[b.length - 1 - i] : 0;
+            unchecked {
+                uint256 sum = segmentA + segmentB + carry;
+                result[maxLength - i - 1] = sum;
+                if (sum < segmentA || sum < segmentB) {
+                    carry = 1;
+                } else {
+                    carry = 0;
+                }
             }
         }
+        console.log("result is %s\n", result[0]);
         return result;
     }
 
@@ -210,6 +221,7 @@ contract AnimaguSwap is IAnimaguSwap {
             }
         }
 
+        console.log("result is %s\n", string(b));
         return string(b);
     }
 

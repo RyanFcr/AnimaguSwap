@@ -18,7 +18,7 @@
     "@types/elliptic": "^6.4.14",
     "@types/mocha": "^10.0.1",
     "@types/node": "^20.6.0",
-    "chai": "^4.3.7",
+    "chai": "^4.3.10",
     "dotenv": "^16.3.1",
     "ethers": "^6.7.1",
     "hardhat": "^2.17.1",
@@ -42,6 +42,7 @@
     "eth-crypto": "^2.6.0",
     "ethereumjs-util": "^7.1.5",
     "merkletreejs": "^0.3.10",
+    "mocha": "^10.2.0",
     "secp256k1": "^5.0.0",
     "secrets.js-grempe": "^2.0.0",
     "shamirs-secret-sharing": "^1.0.1"

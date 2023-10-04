@@ -275,9 +275,9 @@ async function runSystem(
         console.log("Signature verified!")
         const secretNumber = BigInt(hexTxbAsString) // 将秘密转换为bigint,10进制
         console.log("secretNumber:", secretNumber)
-        const secretLength = secretNumber.toString().length
-        const FIELD_SIZE = BigInt("1" + "0".repeat(secretLength))
-        const shares = additiveSecretSharing(secretNumber, N, FIELD_SIZE) //shares都转换成16进制的string,前面加0x
+        // const secretLength = secretNumber.toString(16).length
+        // const FIELD_SIZE = BigInt("1" + "0".repeat(secretLength))
+        const shares = additiveSecretSharing(secretNumber, N) //shares都转换成16进制的string,前面加0x
         console.log("shares:", shares)
 
         const hashedShares = shares.map((share: string) =>

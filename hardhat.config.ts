@@ -16,7 +16,7 @@ let ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || ""
 let COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY || ""
 
 const config: HardhatUserConfig = {
-    defaultNetwork: "sepolia",
+    defaultNetwork: "hardhat",
     solidity: "0.8.20",
     networks: {
         hardhat: {
