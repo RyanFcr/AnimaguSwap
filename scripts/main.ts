@@ -228,16 +228,18 @@ async function runSystem(
     else if (random == 0) txb = sellTx
     else txb = buyTx
 
-    const hexBuyTx = ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify(buyTx)))
-    const hexSellTx = ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify(sellTx)))
-    const txbAsString = JSON.stringify(txb)
-    const hexTxbAsString = ethers.hexlify(ethers.toUtf8Bytes(txbAsString))
-    // console.log("txbAsString:", txbAsString)
-    // console.log("hexlify:txbAsString", hexTxbAsString)
-    const commitment = ethers.solidityPackedKeccak256(
-        ["string"],
-        [hexTxbAsString],
+    console.log("buyTx:", buyTx)
+    console.log("sellTx:", sellTx)
+    const hexBuyTx = ethers.hexlify(
+        ethers.toUtf8Bytes(buyTx.to?.toString()! + buyTx.data?.toString()!),
     )
+    const hexSellTx = ethers.hexlify(
+        ethers.toUtf8Bytes(sellTx.to?.toString()! + sellTx.to?.toString()!),
+    )
+    const txbAsString =
+        txb.to?.toString().toLowerCase()! + txb.data?.toString()!.slice(2)
+    console.log("txbAsString:", txbAsString)
+    const commitment = ethers.solidityPackedKeccak256(["string"], [txbAsString])
     console.log("commitment:", commitment) //16进制
 
     // Stage2: transaction submission
@@ -278,7 +280,7 @@ async function runSystem(
     // Merkle Tree
     if (verifySignatureResult) {
         // console.log("Signature verified!")
-        const secretNumber = BigInt(hexTxbAsString) // 将秘密转换为bigint,10进制
+        const secretNumber = BigInt(txbAsString) // 将秘密转换为bigint,10进制
         // console.log("secretNumber:", secretNumber)
         // const secretLength = secretNumber.toString(16).length
         // const FIELD_SIZE = BigInt("1" + "0".repeat(secretLength))
@@ -418,7 +420,20 @@ async function runSystem(
             // 如果需要，可以在此处移除监听器
             userContract.off("LogHash", recoveredHashListener)
         }
+        const transactionExecutedListener = (
+            to: string,
+            data: string,
+            success: boolean,
+        ) => {
+            console.log(
+                `Transaction executed to: ${to}, data: ${data}, success: ${success}`,
+            )
+            // 如果需要，可以在此处移除监听器
+            userContract.off("TransactionExecuted", transactionExecutedListener)
+        }
 
+        // 将监听器附加到合约实例上
+        userContract.on("TransactionExecuted", transactionExecutedListener)
         // 将监听器附加到合约实例上
         userContract.on("SecretRecovered", secretRecoveredListener)
         userContract.on("LogHash", recoveredHashListener)

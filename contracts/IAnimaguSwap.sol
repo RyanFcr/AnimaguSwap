@@ -28,5 +28,5 @@ interface IAnimaguSwap {
     function recoverAndExecute(
         string memory buyTx,
         string memory sellTx
-    ) external;
+    ) external payable;
 }

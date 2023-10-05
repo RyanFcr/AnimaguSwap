@@ -32,7 +32,6 @@ contract AnimaguSwap is IAnimaguSwap {
     // mapping(uint256 => Commitment) public commits;
     // commitment队列控制交易的顺序
     bytes32[] public commitments;
-    bytes public transactionData;
 
     constructor() {}
 
@@ -89,7 +88,6 @@ contract AnimaguSwap is IAnimaguSwap {
             deposits[msg.sender] = 0;
             sharesArray[shareCounter] = share;
             shareCounter += 1;
-            // 存储share
         } else {
             deposits[msg.sender] = 0; // Burn the deposit
         }
@@ -99,7 +97,7 @@ contract AnimaguSwap is IAnimaguSwap {
     function recoverAndExecute(
         string memory buyTx,
         string memory sellTx
-    ) external override {
+    ) external payable override {
         string memory secret = removeLeadingZerosFromSecondPosition(
             recoverSecret(sharesArray)
         );
@@ -110,34 +108,37 @@ contract AnimaguSwap is IAnimaguSwap {
         emit LogHash(recoveredHash);
         bytes32 _commitment = commitments[0];
         if (recoveredHash == _commitment) {
+            // 已经验证
             commitments.pop();
+            string memory transaction;
             if (revealedB == 1) {
                 if (recoveredHash == buyTxHash) {
-                    transactionData = abi.encode(sellTx);
+                    transaction = sellTx;
                 } else {
-                    transactionData = abi.encode(buyTx);
+                    transaction = buyTx;
                 }
             } else {
-                transactionData = abi.encode(secret);
+                transaction = secret;
             }
-            console.log("transactionData", string(transactionData));
-            // executeTransaction();
+            bytes memory txBytes = bytes(transaction);
+
+            bytes memory to = new bytes(20);
+            for (uint256 i = 0; i < 20; i++) {
+                to[i] = txBytes[i];
+            }
+
+            address toAddress = address(bytes20(to));
+            bytes memory data = new bytes(txBytes.length - 20);
+            for (uint256 i = 20; i < txBytes.length; i++) {
+                data[i - 20] = txBytes[i];
+            }
+            require(data.length > 0, "No transaction data");
+            (bool success, ) = toAddress.call(data);
+            emit TransactionExecuted(toAddress, data, success); // 发出事件
+            require(success, "Transaction failed");
+
+            //TODO Tf
         }
-    }
-
-    function executeTransaction() internal {
-        require(transactionData.length > 0, "No transaction data");
-
-        // 解析参数
-        (address to, bytes memory data) = abi.decode(
-            transactionData,
-            (address, bytes)
-        );
-
-        // 调用call执行
-        (bool success, ) = to.call(data);
-        emit TransactionExecuted(to, data, success); // 发出事件
-        require(success, "Transaction failed");
     }
 
     function recoverSecret(
@@ -148,7 +149,6 @@ contract AnimaguSwap is IAnimaguSwap {
             uint256[] memory nextValue = parseHexStringToBigInt(shares[i]);
             sum = addBigInts(sum, nextValue);
         }
-
         return bigIntToHexString(sum);
     }
 
