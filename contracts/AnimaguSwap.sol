@@ -103,34 +103,26 @@ contract AnimaguSwap is IAnimaguSwap {
         string memory secret = removeLeadingZerosFromSecondPosition(
             recoverSecret(sharesArray)
         );
-        // string
-        // memory secret = "7b22746f223a22307838366463643332393343353343663845466437333033423537626562326133463637316444453938222c2264617461223a22307833386564313733393030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303861633732333034383965383030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303233383666323666633130303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303061303030303030303030303030303030303030303030303030306537663336336133353863376366303762386335396533643564653764653439346332316366643630303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303635316532636664303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030323030303030303030303030303030303030303030303030303166393834306138356435616635626631643137363266393235626461646463343230316639383430303030303030303030303030303030303030303030303066666639393736373832643436636330353633306431663665626162313862323332346436623134227d";
         emit SecretRecovered(secret);
-        // console.log("secret: ", secret);
         shareCounter = 0;
         bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
         bytes32 buyTxHash = keccak256(abi.encodePacked(buyTx));
         emit LogHash(recoveredHash);
         bytes32 _commitment = commitments[0];
-        // bytes32 _commitment = 0x88b57e95d3d0bb7c392a9f6b04e8bcb8bc3465b6a2933c1390e434e003759af8;
-        console.log(string(abi.encodePacked(recoveredHash)));
-        console.log(string(abi.encodePacked(_commitment)));
-        console.log("1");
-        // if (recoveredHash == _commitment) {
-        commitments.pop();
-        console.log("commitments.pop()");
-        if (revealedB == 1) {
-            if (recoveredHash == buyTxHash) {
-                transactionData = abi.encode(sellTx);
+        if (recoveredHash == _commitment) {
+            commitments.pop();
+            if (revealedB == 1) {
+                if (recoveredHash == buyTxHash) {
+                    transactionData = abi.encode(sellTx);
+                } else {
+                    transactionData = abi.encode(buyTx);
+                }
             } else {
-                transactionData = abi.encode(buyTx);
+                transactionData = abi.encode(secret);
             }
-        } else {
-            transactionData = abi.encode(secret);
+            console.log("transactionData", string(transactionData));
+            // executeTransaction();
         }
-        console.log("transactionData", string(transactionData));
-        // executeTransaction();
-        // }
     }
 
     function executeTransaction() internal {

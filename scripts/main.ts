@@ -234,7 +234,10 @@ async function runSystem(
     const hexTxbAsString = ethers.hexlify(ethers.toUtf8Bytes(txbAsString))
     // console.log("txbAsString:", txbAsString)
     // console.log("hexlify:txbAsString", hexTxbAsString)
-    const commitment = ethers.keccak256(hexTxbAsString)
+    const commitment = ethers.solidityPackedKeccak256(
+        ["string"],
+        [hexTxbAsString],
+    )
     console.log("commitment:", commitment) //16进制
 
     // Stage2: transaction submission
