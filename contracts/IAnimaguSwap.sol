@@ -7,7 +7,8 @@ interface IAnimaguSwap {
     function commit(
         bytes32 _hashTx,
         bytes32 _hashWV,
-        bytes32 _commitment
+        bytes32 _commitment,
+        uint N
     ) external returns (bool);
 
     function revealStaker(
@@ -24,5 +25,8 @@ interface IAnimaguSwap {
         uint8 W
     ) external payable returns (bool);
 
-    function recoverAndExecute() external;
+    function recoverAndExecute(
+        string memory buyTx,
+        string memory sellTx
+    ) external;
 }

@@ -179,17 +179,17 @@ async function runSystem(
     // const UNI_CONTRACT = new ethers.Contract(UNI_ADDRESS, UNI_ABI, userWallet)
     const WETH_SEPOLIA_ADDRESS = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
 
-    const random = randomBit()
+    const random = 0 //randomBit()
     const B = randomBit()
 
     console.log("Random number:", random)
     console.log("B:", B)
     let balance = await provider.getBalance(userWallet.address)
-    console.log(
-        `User wallet balance:${parseFloat(ethers.formatEther(balance)).toFixed(
-            8,
-        )}`,
-    )
+    // console.log(
+    //     `User wallet balance:${parseFloat(ethers.formatEther(balance)).toFixed(
+    //         8,
+    //     )}`,
+    // )
 
     let buyTx
     let sellTx
@@ -228,10 +228,12 @@ async function runSystem(
     else if (random == 0) txb = sellTx
     else txb = buyTx
 
+    const hexBuyTx = ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify(buyTx)))
+    const hexSellTx = ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify(sellTx)))
     const txbAsString = JSON.stringify(txb)
     const hexTxbAsString = ethers.hexlify(ethers.toUtf8Bytes(txbAsString))
-    console.log("txbAsString:", txbAsString)
-    console.log("hexlify:txbAsString", hexTxbAsString)
+    // console.log("txbAsString:", txbAsString)
+    // console.log("hexlify:txbAsString", hexTxbAsString)
     const commitment = ethers.keccak256(hexTxbAsString)
     console.log("commitment:", commitment) //16进制
 
@@ -239,31 +241,31 @@ async function runSystem(
     const V = randomBit()
     const message = concatenateNumbers(B, V)
 
-    console.log("message:", message)
+    // console.log("message:", message)
     const keyPair = curve.keyFromPrivate(flipperPrivateKey.slice(2), "hex") //需要删掉0x
     const publicKeyHex = keyPair.getPublic("hex").slice(2) // 删除"04"前缀，因为eth-crypto期望一个没有前缀的公钥
-    console.log("Public Key:", publicKeyHex)
+    // console.log("Public Key:", publicKeyHex)
 
     // 公钥私钥传输消息
     const encryptedMessage = await EthCrypto.encryptWithPublicKey(
         publicKeyHex,
         message,
     )
-    console.log("Encrypted message:", encryptedMessage)
+    // console.log("Encrypted message:", encryptedMessage)
 
     // 使用私钥解密消息
     const decryptedMessage = await EthCrypto.decryptWithPrivateKey(
         flipperPrivateKey,
         encryptedMessage,
     )
-    console.log("Decrypted message:", decryptedMessage)
+    // console.log("Decrypted message:", decryptedMessage)
 
     // Flipper Sign it
     const signedCommitment = await signedMessage(
         flipperWallet,
         decryptedMessage,
     )
-    console.log("signedCommitment:", signedCommitment)
+    // console.log("signedCommitment:", signedCommitment)
     const verifySignatureResult = await verifySignature(
         signedCommitment,
         decryptedMessage,
@@ -272,9 +274,9 @@ async function runSystem(
 
     // Merkle Tree
     if (verifySignatureResult) {
-        console.log("Signature verified!")
+        // console.log("Signature verified!")
         const secretNumber = BigInt(hexTxbAsString) // 将秘密转换为bigint,10进制
-        console.log("secretNumber:", secretNumber)
+        // console.log("secretNumber:", secretNumber)
         // const secretLength = secretNumber.toString(16).length
         // const FIELD_SIZE = BigInt("1" + "0".repeat(secretLength))
         const shares = additiveSecretSharing(secretNumber, N) //shares都转换成16进制的string,前面加0x
@@ -283,15 +285,15 @@ async function runSystem(
         const hashedShares = shares.map((share: string) =>
             ethers.keccak256(ethers.toUtf8Bytes(share)),
         )
-        console.log("hashedShares:", hashedShares)
+        // console.log("hashedShares:", hashedShares)
         const tree = new MerkleTree(shares, keccak256, { sort: true })
         const root = "0x" + tree.getRoot().toString("hex")
         const hashedTree = new MerkleTree(hashedShares, keccak256, {
             sort: true,
         })
         const hashedRoot = "0x" + hashedTree.getRoot().toString("hex")
-        console.log("root:", root)
-        console.log("hashedRoot:", hashedRoot)
+        // console.log("root:", root)
+        // console.log("hashedRoot:", hashedRoot)
 
         // 为每个 staker 创建一个数组，其中包含他们的 share 和其对应的 Merkle proof
         const stakerData = stakers.map((staker, index) => {
@@ -367,31 +369,17 @@ async function runSystem(
         const hashedWV = ethers.keccak256(
             ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
         )
-        // const hashedMerkleRoot = ethers.keccak256(
-        //     ethers.toUtf8Bytes(hashedRoot),
-        // )
-        console.log("hashedRoot:", hashedRoot)
-        console.log("hashedWV:", hashedWV)
-        // console.log("hashedMerkleRoot:", hashedRoot)
+        // console.log("hashedRoot:", hashedRoot)
+        // console.log("hashedWV:", hashedWV)
         // 调用commit函数
         const commitTx = await userContract.commit(
             hashedRoot,
             hashedWV,
             commitment,
+            N,
         )
         await commitTx.wait()
         console.log("Commit transaction sent and mined.")
-
-        const flipperRevealedListener = (flipper: any, success: any) => {
-            console.log(
-                `Flipper ${flipper} reveal ${
-                    success ? "successful" : "failed"
-                }`,
-            )
-            // Remove the listener once it has fired to prevent it from being called multiple times.
-            flipperContract.off("FlipperRevealed", flipperRevealedListener)
-        }
-        flipperContract.on("FlipperRevealed", flipperRevealedListener)
 
         let flipperB = decryptedMessage[0]
         try {
@@ -403,16 +391,11 @@ async function runSystem(
             console.error("Error when trying to reveal flipper:", error)
         }
 
-        const animaguSwapContractInstance = new ethers.Contract(
-            ANIMAGUSWAP_ADDRESS,
-            ANIMAGUSWAP_ABI,
-            provider, // 使用全局provider
-        )
-        animaguSwapContractInstance.on("StakerRevealed", (staker, success) => {
-            console.log(
-                `Staker ${staker} reveal ${success ? "successful" : "failed"}`,
-            )
-        })
+        // const animaguSwapContractInstance = new ethers.Contract(
+        //     ANIMAGUSWAP_ADDRESS,
+        //     ANIMAGUSWAP_ABI,
+        //     provider, // 使用全局provider
+        // )
 
         for (let index = 0; index < N; index++) {
             const stakerRevealTx = await stakerContracts[index].revealStaker(
@@ -421,17 +404,25 @@ async function runSystem(
             )
             await stakerRevealTx.wait()
         }
-        animaguSwapContractInstance.removeAllListeners("StakerRevealed")
 
         const secretRecoveredListener = (secret: string) => {
             console.log(`Secret recovered: ${secret}`)
             // 如果需要，可以在此处移除监听器
             userContract.off("SecretRecovered", secretRecoveredListener)
         }
+        const recoveredHashListener = (hash: string) => {
+            console.log(`Hash recovered: ${hash}`)
+            // 如果需要，可以在此处移除监听器
+            userContract.off("LogHash", recoveredHashListener)
+        }
 
         // 将监听器附加到合约实例上
         userContract.on("SecretRecovered", secretRecoveredListener)
-        const recoverAndExecute = await userContract.recoverAndExecute()
+        userContract.on("LogHash", recoveredHashListener)
+        const recoverAndExecute = await userContract.recoverAndExecute(
+            hexBuyTx,
+            hexSellTx,
+        )
         await recoverAndExecute.wait()
     } else {
         console.log("Signature verification failed!")

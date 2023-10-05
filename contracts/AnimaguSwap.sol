@@ -6,10 +6,10 @@ import "hardhat/console.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract AnimaguSwap is IAnimaguSwap {
-    event StakerRevealed(address indexed staker, bool success);
-    event FlipperRevealed(address indexed flipper, bool success);
     event SecretRecovered(string secret);
-    event DebugUintArray(uint256[] value);
+    event TransactionExecuted(address indexed to, bytes data, bool success);
+    event LogHash(bytes32 indexed hashValue);
+
     // 记录质押的资金
     using MerkleProof for bytes32[];
     mapping(address => uint256) public deposits;
@@ -38,7 +38,6 @@ contract AnimaguSwap is IAnimaguSwap {
 
     function deposit(uint256 _amount) external payable override returns (bool) {
         require(_amount > 0, "Invalid deposit amount");
-        // 将资金转移到合约
         require(msg.value == _amount, "Sent value doesn't match the deposit");
         deposits[msg.sender] += _amount;
         return true;
@@ -47,11 +46,13 @@ contract AnimaguSwap is IAnimaguSwap {
     function commit(
         bytes32 hashTx,
         bytes32 hashWV,
-        bytes32 commitment
+        bytes32 commitment,
+        uint N
     ) external override returns (bool) {
         _commitTx = hashTx;
         _commitWV = hashWV;
         commitments.push(commitment);
+        sharesArray = new string[](N);
         return true;
     }
 
@@ -64,7 +65,6 @@ contract AnimaguSwap is IAnimaguSwap {
         revealedB = _b; // 将输入的b存储到状态变量中
         payable(msg.sender).transfer(deposits[msg.sender]);
         deposits[msg.sender] = 0;
-        emit FlipperRevealed(msg.sender, true);
         return true;
     }
 
@@ -87,36 +87,50 @@ contract AnimaguSwap is IAnimaguSwap {
         if (isValidProof) {
             payable(msg.sender).transfer(deposits[msg.sender]);
             deposits[msg.sender] = 0;
-            emit StakerRevealed(msg.sender, true);
-            // 增加计数
+            sharesArray[shareCounter] = share;
             shareCounter += 1;
             // 存储share
-            sharesArray.push(share);
         } else {
             deposits[msg.sender] = 0; // Burn the deposit
-            emit StakerRevealed(msg.sender, false);
         }
         return true;
     }
 
-    function recoverAndExecute() external override {
+    function recoverAndExecute(
+        string memory buyTx,
+        string memory sellTx
+    ) external override {
         string memory secret = removeLeadingZerosFromSecondPosition(
             recoverSecret(sharesArray)
         );
-        console.log("secret is %s\n", secret);
+        // string
+        // memory secret = "7b22746f223a22307838366463643332393343353343663845466437333033423537626562326133463637316444453938222c2264617461223a22307833386564313733393030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303861633732333034383965383030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303233383666323666633130303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303061303030303030303030303030303030303030303030303030306537663336336133353863376366303762386335396533643564653764653439346332316366643630303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303635316532636664303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030323030303030303030303030303030303030303030303030303166393834306138356435616635626631643137363266393235626461646463343230316639383430303030303030303030303030303030303030303030303066666639393736373832643436636330353633306431663665626162313862323332346436623134227d";
         emit SecretRecovered(secret);
+        // console.log("secret: ", secret);
         shareCounter = 0;
         bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
-        // console.log(string(abi.encodePacked(recoveredHash)));
+        bytes32 buyTxHash = keccak256(abi.encodePacked(buyTx));
+        emit LogHash(recoveredHash);
         bytes32 _commitment = commitments[0];
-        if (recoveredHash == _commitment) {
-            commitments.pop();
-            console.log("1");
-            // Here, execute the transaction as the hashes match.
+        // bytes32 _commitment = 0x88b57e95d3d0bb7c392a9f6b04e8bcb8bc3465b6a2933c1390e434e003759af8;
+        console.log(string(abi.encodePacked(recoveredHash)));
+        console.log(string(abi.encodePacked(_commitment)));
+        console.log("1");
+        // if (recoveredHash == _commitment) {
+        commitments.pop();
+        console.log("commitments.pop()");
+        if (revealedB == 1) {
+            if (recoveredHash == buyTxHash) {
+                transactionData = abi.encode(sellTx);
+            } else {
+                transactionData = abi.encode(buyTx);
+            }
+        } else {
             transactionData = abi.encode(secret);
-            // 根据b去进行翻转
-            executeTransaction();
         }
+        console.log("transactionData", string(transactionData));
+        // executeTransaction();
+        // }
     }
 
     function executeTransaction() internal {
@@ -130,7 +144,7 @@ contract AnimaguSwap is IAnimaguSwap {
 
         // 调用call执行
         (bool success, ) = to.call(data);
-
+        emit TransactionExecuted(to, data, success); // 发出事件
         require(success, "Transaction failed");
     }
 
@@ -138,8 +152,6 @@ contract AnimaguSwap is IAnimaguSwap {
         string[] memory shares
     ) internal pure returns (string memory) {
         uint256[] memory sum = parseHexStringToBigInt(shares[0]); //with 0x
-        // emit DebugEvent("Value of sum is:", sum.segments[0]);
-        console.log("Value of sum is:\n", sum[0]);
         for (uint256 i = 1; i < shares.length; i++) {
             uint256[] memory nextValue = parseHexStringToBigInt(shares[i]);
             sum = addBigInts(sum, nextValue);
@@ -151,9 +163,6 @@ contract AnimaguSwap is IAnimaguSwap {
     function parseHexStringToBigInt(
         string memory s
     ) internal pure returns (uint256[] memory) {
-        // 使用SafeMath进行安全的数学操作
-        // using SafeMath for uint256;
-
         bytes memory b = bytes(s);
         uint256 current = 0;
         uint256 segmentIndex = 0;
@@ -183,7 +192,6 @@ contract AnimaguSwap is IAnimaguSwap {
             if (charCount == 64 || i == 2) {
                 // 当我们解析了64个字符或到达字符串的开始时，保存当前的数值
                 result[segmentIndex] = current;
-                console.log("result is %s\n", result[segmentIndex]);
                 segmentIndex++;
                 current = 0;
                 charCount = 0;
