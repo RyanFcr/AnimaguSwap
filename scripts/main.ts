@@ -39,7 +39,6 @@ async function main() {
     // 1, 2, 3, ... are the stakers
     // 这个本来不是整个系统的一部分，但是一开始staker和flipper都没钱，所以有了这一步让转点钱给
     for (let i = 0; i <= N; i++) {
-        //     // N is the number of stakers
         const privateKey = process.env[`PRIVATE_KEY_${i}`]
 
         if (!privateKey) {
@@ -167,16 +166,9 @@ async function runSystem(
     //Sepolia DAI 0x64cE2F75c6887C77c61991bA2D6e456f9698adc3
     //Goerli DAI 0x5c221e77624690fff6dd741493d735a17716c26b
     // Uni 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
-    // const Uni: Token = new Token(
-    //     ExtendedChainId.SEPOLIA as any,
-    //     "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
-    //     18,
-    // )
 
     // Stage 1: transaction creation
     const UNI_ADDRESS = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
-    // const UNI_ABI = JSON.parse(fs.readFileSync("./abis/erc20.json").toString())
-    // const UNI_CONTRACT = new ethers.Contract(UNI_ADDRESS, UNI_ABI, userWallet)
     const WETH_SEPOLIA_ADDRESS = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
 
     const random = 0 //randomBit()
@@ -185,11 +177,11 @@ async function runSystem(
     console.log("Random number:", random)
     console.log("B:", B)
     let balance = await provider.getBalance(userWallet.address)
-    // console.log(
-    //     `User wallet balance:${parseFloat(ethers.formatEther(balance)).toFixed(
-    //         8,
-    //     )}`,
-    // )
+    console.log(
+        `User wallet balance:${parseFloat(ethers.formatEther(balance)).toFixed(
+            8,
+        )}`,
+    )
 
     let buyTx
     let sellTx
@@ -228,17 +220,11 @@ async function runSystem(
     else if (random == 0) txb = sellTx
     else txb = buyTx
 
-    console.log("buyTx:", buyTx)
-    console.log("sellTx:", sellTx)
-    const hexBuyTx = ethers.hexlify(
-        ethers.toUtf8Bytes(buyTx.to?.toString()! + buyTx.data?.toString()!),
-    )
-    const hexSellTx = ethers.hexlify(
-        ethers.toUtf8Bytes(sellTx.to?.toString()! + sellTx.to?.toString()!),
-    )
+    const stringBuyTx = buyTx.to?.toString()! + buyTx.data?.toString()!.slice(2)
+    const stringSellTx =
+        sellTx.to?.toString()! + sellTx.to?.toString()!.slice(2)
     const txbAsString =
         txb.to?.toString().toLowerCase()! + txb.data?.toString()!.slice(2)
-    console.log("txbAsString:", txbAsString)
     const commitment = ethers.solidityPackedKeccak256(["string"], [txbAsString])
     console.log("commitment:", commitment) //16进制
 
@@ -246,31 +232,25 @@ async function runSystem(
     const V = randomBit()
     const message = concatenateNumbers(B, V)
 
-    // console.log("message:", message)
     const keyPair = curve.keyFromPrivate(flipperPrivateKey.slice(2), "hex") //需要删掉0x
     const publicKeyHex = keyPair.getPublic("hex").slice(2) // 删除"04"前缀，因为eth-crypto期望一个没有前缀的公钥
-    // console.log("Public Key:", publicKeyHex)
 
     // 公钥私钥传输消息
     const encryptedMessage = await EthCrypto.encryptWithPublicKey(
         publicKeyHex,
         message,
     )
-    // console.log("Encrypted message:", encryptedMessage)
-
     // 使用私钥解密消息
     const decryptedMessage = await EthCrypto.decryptWithPrivateKey(
         flipperPrivateKey,
         encryptedMessage,
     )
-    // console.log("Decrypted message:", decryptedMessage)
 
     // Flipper Sign it
     const signedCommitment = await signedMessage(
         flipperWallet,
         decryptedMessage,
     )
-    // console.log("signedCommitment:", signedCommitment)
     const verifySignatureResult = await verifySignature(
         signedCommitment,
         decryptedMessage,
@@ -279,26 +259,20 @@ async function runSystem(
 
     // Merkle Tree
     if (verifySignatureResult) {
-        // console.log("Signature verified!")
+        console.log("Signature verified!")
         const secretNumber = BigInt(txbAsString) // 将秘密转换为bigint,10进制
-        // console.log("secretNumber:", secretNumber)
-        // const secretLength = secretNumber.toString(16).length
-        // const FIELD_SIZE = BigInt("1" + "0".repeat(secretLength))
         const shares = additiveSecretSharing(secretNumber, N) //shares都转换成16进制的string,前面加0x
         console.log("shares:", shares)
 
         const hashedShares = shares.map((share: string) =>
             ethers.keccak256(ethers.toUtf8Bytes(share)),
         )
-        // console.log("hashedShares:", hashedShares)
         const tree = new MerkleTree(shares, keccak256, { sort: true })
         const root = "0x" + tree.getRoot().toString("hex")
         const hashedTree = new MerkleTree(hashedShares, keccak256, {
             sort: true,
         })
         const hashedRoot = "0x" + hashedTree.getRoot().toString("hex")
-        // console.log("root:", root)
-        // console.log("hashedRoot:", hashedRoot)
 
         // 为每个 staker 创建一个数组，其中包含他们的 share 和其对应的 Merkle proof
         const stakerData = stakers.map((staker, index) => {
@@ -360,7 +334,6 @@ async function runSystem(
                 hashedShare, // the encryptedShare itself
                 hashedRoot, // the root of the Merkle Tree
             )
-
             console.log(
                 `Proof for staker ${index} is`,
                 isValidProof ? "valid" : "invalid",
@@ -374,9 +347,7 @@ async function runSystem(
         const hashedWV = ethers.keccak256(
             ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
         )
-        // console.log("hashedRoot:", hashedRoot)
-        // console.log("hashedWV:", hashedWV)
-        // 调用commit函数
+        // Call commit
         const commitTx = await userContract.commit(
             hashedRoot,
             hashedWV,
@@ -396,12 +367,6 @@ async function runSystem(
             console.error("Error when trying to reveal flipper:", error)
         }
 
-        // const animaguSwapContractInstance = new ethers.Contract(
-        //     ANIMAGUSWAP_ADDRESS,
-        //     ANIMAGUSWAP_ABI,
-        //     provider, // 使用全局provider
-        // )
-
         for (let index = 0; index < N; index++) {
             const stakerRevealTx = await stakerContracts[index].revealStaker(
                 stakerData[index].share,
@@ -412,12 +377,10 @@ async function runSystem(
 
         const secretRecoveredListener = (secret: string) => {
             console.log(`Secret recovered: ${secret}`)
-            // 如果需要，可以在此处移除监听器
             userContract.off("SecretRecovered", secretRecoveredListener)
         }
         const recoveredHashListener = (hash: string) => {
             console.log(`Hash recovered: ${hash}`)
-            // 如果需要，可以在此处移除监听器
             userContract.off("LogHash", recoveredHashListener)
         }
         const transactionExecutedListener = (
@@ -428,20 +391,19 @@ async function runSystem(
             console.log(
                 `Transaction executed to: ${to}, data: ${data}, success: ${success}`,
             )
-            // 如果需要，可以在此处移除监听器
             userContract.off("TransactionExecuted", transactionExecutedListener)
         }
 
-        // 将监听器附加到合约实例上
         userContract.on("TransactionExecuted", transactionExecutedListener)
-        // 将监听器附加到合约实例上
         userContract.on("SecretRecovered", secretRecoveredListener)
         userContract.on("LogHash", recoveredHashListener)
         const recoverAndExecute = await userContract.recoverAndExecute(
-            hexBuyTx,
-            hexSellTx,
+            stringBuyTx,
+            stringSellTx,
         )
         await recoverAndExecute.wait()
+
+        //userComplain
     } else {
         console.log("Signature verification failed!")
     }
