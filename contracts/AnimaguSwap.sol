@@ -5,32 +5,39 @@ import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
+// 定义Uniswap合约的接口
+interface IUniswap {
+    function swapExactTokensForTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+
+    function swapTokensForExactTokens(
+        uint amountOut,
+        uint amountInMax,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+}
+
 contract AnimaguSwap is IAnimaguSwap {
     event SecretRecovered(string secret);
     event TransactionExecuted(address indexed to, bytes data, bool success);
     event LogHash(bytes32 indexed hashValue);
 
-    // 记录质押的资金
     using MerkleProof for bytes32[];
     mapping(address => uint256) public deposits;
 
-    // 记录每个参与者的commit哈希值
-    bytes32 public _commitTx;
+    // Records the commit hash for each participant
     bytes32 public _commitWV;
 
-    uint8 public revealedB; // 新增的状态变量，用于存储b的值
+    uint8 public revealedB; // New state variable to store the value of b
 
-    // 新增的计数器状态变量
-    uint256 public shareCounter = 0;
-    // 新增一个状态变量用于存储所有的shares
-    string[] public sharesArray;
-    // struct Commitment {
-    //     address user;
-    //     bytes32 commitHash;
-    // }
-    // uint256 public commitCounter = 0;
-    // mapping(uint256 => Commitment) public commits;
-    // commitment队列控制交易的顺序
+    // Commitment queue to control transaction order
     bytes32[] public commitments;
 
     constructor() {}
@@ -42,17 +49,75 @@ contract AnimaguSwap is IAnimaguSwap {
         return true;
     }
 
-    function commit(
-        bytes32 hashTx,
-        bytes32 hashWV,
-        bytes32 commitment,
-        uint N
-    ) external override returns (bool) {
-        _commitTx = hashTx;
-        _commitWV = hashWV;
+    function commit(bytes32 commitment) external override returns (bool) {
         commitments.push(commitment);
-        sharesArray = new string[](N);
         return true;
+    }
+
+    function commitAndExecute(
+        bytes32 newCommitment,
+        string memory txbAsString
+    ) external returns (bool) {
+        bytes32 _commitment = commitments[0];
+        require(newCommitment == _commitment, "The commitments do not match.");
+        commitments.pop();
+
+        // 解码 txbAsString
+        address to = parseToFromTxb(txbAsString);
+        bytes memory data = parseDataFromTxb(txbAsString);
+
+        (
+            bool isExactTokensForTokens,
+            uint amountA,
+            uint amountB,
+            address[] memory path,
+            address toAddress,
+            uint deadline
+        ) = decodeData(data);
+
+        IUniswap uniswap = IUniswap(to);
+
+        if (isExactTokensForTokens) {
+            uniswap.swapExactTokensForTokens(
+                amountA,
+                amountB,
+                path,
+                toAddress,
+                deadline
+            );
+        } else {
+            uniswap.swapTokensForExactTokens(
+                amountA,
+                amountB,
+                path,
+                toAddress,
+                deadline
+            );
+        }
+
+        return true;
+    }
+
+    function parseToFromTxb(
+        string memory txbAsString
+    ) internal pure returns (address) {
+        //... 解码得到 to
+    }
+
+    function parseDataFromTxb(
+        string memory txbAsString
+    ) internal pure returns (bytes memory) {
+        //... 解码得到 data
+    }
+
+    function decodeData(
+        bytes memory data
+    )
+        internal
+        pure
+        returns (bool, uint, uint, address[] memory, address, uint)
+    {
+        // 使用Uniswap的ABI对data进行解码，得到函数名和参数
     }
 
     function revealFlipper(uint8 _b) external payable override returns (bool) {
@@ -61,14 +126,14 @@ contract AnimaguSwap is IAnimaguSwap {
             "Only flipper with deposit can reveal"
         );
 
-        revealedB = _b; // 将输入的b存储到状态变量中
-        payable(msg.sender).transfer(deposits[msg.sender]);
-        deposits[msg.sender] = 0;
+        revealedB = _b; // Store the input b to the state variable
+        // payable(msg.sender).transfer(deposits[msg.sender]);
+        // deposits[msg.sender] = 0;
         return true;
     }
 
     function revealStaker(
-        //随着staker的增加，gas fee也在增加
+        // As the number of stakers increases, so does the gas fee
         string memory share,
         bytes32[] memory proof
     ) external payable override returns (bool) {
@@ -76,21 +141,16 @@ contract AnimaguSwap is IAnimaguSwap {
             deposits[msg.sender] > 0,
             "Only stakers with deposits can reveal"
         );
-        // 使用MerkleProof库的verify函数验证
-        // 对原始数据进行哈希，得到固定大小的哈希值
-        bytes32 hashedShare = keccak256(abi.encodePacked(share));
 
-        // 使用MerkleProof库的verify函数验证
-        bool isValidProof = MerkleProof.verify(proof, _commitTx, hashedShare);
+        // Use the MerkleProof library's verify function for verification
+        // bool isValidProof = MerkleProof.verify(proof, _commitTx, hashedShare);
 
-        if (isValidProof) {
-            payable(msg.sender).transfer(deposits[msg.sender]);
-            deposits[msg.sender] = 0;
-            sharesArray[shareCounter] = share;
-            shareCounter += 1;
-        } else {
-            deposits[msg.sender] = 0; // Burn the deposit
-        }
+        // if (isValidProof) {
+        //     payable(msg.sender).transfer(deposits[msg.sender]);
+        //     deposits[msg.sender] = 0;
+        // } else {
+        //     deposits[msg.sender] = 0; // Burn the deposit
+        // }
         return true;
     }
 
@@ -98,193 +158,43 @@ contract AnimaguSwap is IAnimaguSwap {
         string memory buyTx,
         string memory sellTx
     ) external payable override {
-        string memory secret = removeLeadingZerosFromSecondPosition(
-            recoverSecret(sharesArray)
-        );
-        emit SecretRecovered(secret);
-        shareCounter = 0;
-        bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
-        bytes32 buyTxHash = keccak256(abi.encodePacked(buyTx));
-        emit LogHash(recoveredHash);
-        bytes32 _commitment = commitments[0];
-        if (recoveredHash == _commitment) {
-            // 已经验证
-            commitments.pop();
-            string memory transaction;
-            if (revealedB == 1) {
-                if (recoveredHash == buyTxHash) {
-                    transaction = sellTx;
-                } else {
-                    transaction = buyTx;
-                }
-            } else {
-                transaction = secret;
-            }
-            bytes memory txBytes = bytes(transaction);
-
-            bytes memory to = new bytes(20);
-            for (uint256 i = 0; i < 20; i++) {
-                to[i] = txBytes[i];
-            }
-
-            address toAddress = address(bytes20(to));
-            bytes memory data = new bytes(txBytes.length - 20);
-            for (uint256 i = 20; i < txBytes.length; i++) {
-                data[i - 20] = txBytes[i];
-            }
-            require(data.length > 0, "No transaction data");
-            (bool success, ) = toAddress.call(data);
-            emit TransactionExecuted(toAddress, data, success); // 发出事件
-            require(success, "Transaction failed");
-
-            //TODO Tf
-        }
-    }
-
-    function recoverSecret(
-        string[] memory shares
-    ) internal pure returns (string memory) {
-        uint256[] memory sum = parseHexStringToBigInt(shares[0]); //with 0x
-        for (uint256 i = 1; i < shares.length; i++) {
-            uint256[] memory nextValue = parseHexStringToBigInt(shares[i]);
-            sum = addBigInts(sum, nextValue);
-        }
-        return bigIntToHexString(sum);
-    }
-
-    function parseHexStringToBigInt(
-        string memory s
-    ) internal pure returns (uint256[] memory) {
-        bytes memory b = bytes(s);
-        uint256 current = 0;
-        uint256 segmentIndex = 0;
-
-        // 初始化segments
-        uint256 segmentCount = (b.length + 63 - 2) / 64;
-        uint256[] memory result = new uint256[](segmentCount);
-        uint i = b.length - 1;
-        uint charCount = 0; // 已经解析的字符计数
-
-        while (i >= 2) {
-            uint8 tmp = uint8(b[i]);
-            uint256 value = 0;
-
-            if (tmp >= 48 && tmp <= 57) {
-                value = tmp - 48;
-            } else if (tmp >= 97 && tmp <= 102) {
-                value = tmp - 97 + 10;
-            } else if (tmp >= 65 && tmp <= 70) {
-                value = tmp - 65 + 10;
-            }
-
-            // 通过位移操作替代pow函数
-            current |= value << (charCount * 4);
-            charCount++;
-
-            if (charCount == 64 || i == 2) {
-                // 当我们解析了64个字符或到达字符串的开始时，保存当前的数值
-                result[segmentIndex] = current;
-                segmentIndex++;
-                current = 0;
-                charCount = 0;
-            }
-
-            if (i == 2) break; // 因为我们使用了 uint，所以需要这样来判断
-            i--;
-        }
-        return result;
-    }
-
-    function addBigInts(
-        uint256[] memory a,
-        uint256[] memory b
-    ) internal pure returns (uint256[] memory) {
-        uint256 maxLength = a.length > b.length ? a.length : b.length; //如果长度相等，又有carry，需要maxLength+1
-        uint256[] memory result;
-        result = new uint256[](maxLength);
-        uint256 carry = 0;
-
-        for (uint256 i = 0; i < maxLength; i++) {
-            uint256 segmentA = i < a.length ? a[i] : 0;
-            uint256 segmentB = i < b.length ? b[i] : 0;
-            unchecked {
-                uint256 sum = segmentA + segmentB + carry;
-                result[maxLength - i - 1] = sum;
-                if (sum < segmentA || sum < segmentB) {
-                    carry = 1;
-                } else {
-                    carry = 0;
-                }
-            }
-        }
-        return result;
-    }
-
-    function bigIntToHexString(
-        uint256[] memory x
-    ) internal pure returns (string memory) {
-        // Adjust the size of the byte array to account for the "0x" prefix
-        bytes memory b = new bytes(x.length * 64 + 2);
-
-        // Set the "0x" prefix
-        b[0] = bytes1(uint8(48)); // ASCII for "0"
-        b[1] = bytes1(uint8(120)); // ASCII for "x"
-
-        for (
-            uint256 segmentIndex = 0;
-            segmentIndex < x.length;
-            segmentIndex++
-        ) {
-            uint256 current = x[segmentIndex];
-            for (uint i = 0; i < 64; i++) {
-                uint8 tmp = uint8(current & 0xF);
-                if (tmp < 10) {
-                    b[65 - i + segmentIndex * 64] = bytes1(uint8(tmp + 48));
-                } else {
-                    b[65 - i + segmentIndex * 64] = bytes1(uint8(tmp + 87));
-                }
-                current = current >> 4;
-            }
-        }
-        return string(b);
-    }
-
-    function removeLeadingZerosFromSecondPosition(
-        string memory input
-    ) internal pure returns (string memory) {
-        bytes memory b = bytes(input);
-
-        // 如果长度小于2，直接返回
-        if (b.length < 2) {
-            return input;
-        }
-
-        uint startIndexOfZeros = 2;
-        uint endIndexOfZeros = 2;
-
-        // 找到从第二位开始的连续零的结束位置
-        while (endIndexOfZeros < b.length && b[endIndexOfZeros] == "0") {
-            endIndexOfZeros++;
-        }
-
-        // 如果没有找到连续的零，直接返回原字符串
-        if (endIndexOfZeros == startIndexOfZeros) {
-            return input;
-        }
-
-        // 构建一个新的字符串，没有连续的零
-        bytes memory result = new bytes(
-            b.length - (endIndexOfZeros - startIndexOfZeros)
-        );
-        uint index = 0;
-
-        for (uint i = 0; i < b.length; i++) {
-            if (i < startIndexOfZeros || i >= endIndexOfZeros) {
-                result[index] = b[i];
-                index++;
-            }
-        }
-        return string(result);
+        // string memory secret = removeLeadingZerosFromSecondPosition(
+        //     recoverSecret(sharesArray)
+        // );
+        // emit SecretRecovered(secret);
+        // shareCounter = 0;
+        // bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
+        // bytes32 buyTxHash = keccak256(abi.encodePacked(buyTx));
+        // emit LogHash(recoveredHash);
+        // bytes32 _commitment = commitments[0];
+        // if (recoveredHash == _commitment) {
+        //     // Already verified
+        //     commitments.pop();
+        //     string memory transaction;
+        //     if (revealedB == 1) {
+        //         if (recoveredHash == buyTxHash) {
+        //             transaction = sellTx;
+        //         } else {
+        //             transaction = buyTx;
+        //         }
+        //     } else {
+        //         transaction = secret;
+        //     }
+        //     bytes memory txBytes = bytes(transaction);
+        //     bytes memory to = new bytes(20);
+        //     for (uint256 i = 0; i < 20; i++) {
+        //         to[i] = txBytes[i];
+        //     }
+        //     address toAddress = address(bytes20(to));
+        //     bytes memory data = new bytes(txBytes.length - 20);
+        //     for (uint256 i = 20; i < txBytes.length; i++) {
+        //         data[i - 20] = txBytes[i];
+        //     }
+        //     require(data.length > 0, "No transaction data");
+        //     (bool success, ) = toAddress.call(data);
+        //     emit TransactionExecuted(toAddress, data, success); // Emit an event
+        //     require(success, "Transaction failed");
+        //TODO Add TransactionF
     }
 
     function userComplain(
@@ -302,7 +212,7 @@ contract AnimaguSwap is IAnimaguSwap {
         require(computedWV == _commitWV, "W+V hash does not match");
 
         // Verify revealedB + V hash
-        uint8 concatenatedBV = revealedB * 10 + V; // 这里可能需要检查revealedB的类型和确保其值是0或1。
+        uint8 concatenatedBV = revealedB * 10 + V; // Here, you might need to check the type of revealedB and ensure its value is 0 or 1.
         bytes32 messageHash = keccak256(abi.encodePacked(concatenatedBV));
 
         // Recover signer's address from signature and messageHash

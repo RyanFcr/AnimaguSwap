@@ -3,20 +3,19 @@ import * as fs from "fs"
 import * as path from "path"
 import { readFileSync } from "fs"
 // import * as secrets from "secrets.js-grempe"
-// import sss from "shamirs-secret-sharing"
+import sss from "shamirs-secret-sharing"
 import { MerkleTree } from "merkletreejs"
 import { keccak256 } from "js-sha3"
 import { buildBuyTx, buildSellTx } from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
 import { concatenateNumbers } from "./concatenateUtils"
 import { randomBit } from "./randomUtils"
-import { additiveSecretSharing } from "./additiveSecretSharing"
 import { ec } from "elliptic"
 import * as EthCrypto from "eth-crypto"
 
 const curve = new ec("secp256k1")
 async function main() {
-    // Initialization 初始化
+    // Initialization
     const stakers: any[] = []
     const N = 2 // N is the number of stakers
     const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
@@ -87,7 +86,7 @@ async function runSystem(
     const ANIMAGUSWAP_ABI = contractArtifact.abi
     const ANIMAGUSWAP_ADDRESS = fs
         .readFileSync("./output/AnimaguSwapAddress.txt")
-        .toString() // 你应该从deploy脚本中动态获取这个地址。
+        .toString()
 
     // Wallet
     const userWallet = new ethers.Wallet(userPrivateKey, provider)
@@ -188,8 +187,8 @@ async function runSystem(
     let tx
     let txb
 
-    const amountOut = ethers.parseUnits("10", 18) // 例如：希望得到10个UNI
-    const amountInMax = ethers.parseUnits("0.1", 18) // 例如：最多愿意支付0.1个WETH
+    const amountOut = ethers.parseUnits("10", 18) // For example: Wanting to get 10 UNI tokens
+    const amountInMax = ethers.parseUnits("0.1", 18) // For example: Willing to pay a maximum of 0.1 WETH
     const buyPath = [WETH_SEPOLIA_ADDRESS, UNI_ADDRESS]
     const deadline = Math.floor(Date.now() / 1000) + 60 * 10
 
@@ -201,8 +200,8 @@ async function runSystem(
         deadline,
     )
 
-    const amountIn = ethers.parseUnits("10", 18) // 例如：希望出售10个UNI
-    const amountOutMin = ethers.parseUnits("0.01", 18) // 例如：至少希望得到0.01个WETH
+    const amountIn = ethers.parseUnits("10", 18) // For example: Wanting to sell 10 UNI tokens
+    const amountOutMin = ethers.parseUnits("0.01", 18) // For example: Expecting to receive at least 0.01 WETH
     const sellPath = [UNI_ADDRESS, WETH_SEPOLIA_ADDRESS]
 
     sellTx = await buildSellTx(
@@ -226,21 +225,28 @@ async function runSystem(
     const txbAsString =
         txb.to?.toString().toLowerCase()! + txb.data?.toString()!.slice(2)
     const commitment = ethers.solidityPackedKeccak256(["string"], [txbAsString])
-    console.log("commitment:", commitment) //16进制
+    console.log("txbAsString:", txbAsString)
+    console.log("commitment:", commitment) //hex
 
     // Stage2: transaction submission
+    // Call commit
+    const commitTx = await userContract.commit(commitment)
+    await commitTx.wait()
+    console.log("Commit transaction sent and mined.")
+
     const V = randomBit()
-    const message = concatenateNumbers(B, V)
+    const message = concatenateNumbers(B, V) // Concatenation of B and V
 
-    const keyPair = curve.keyFromPrivate(flipperPrivateKey.slice(2), "hex") //需要删掉0x
-    const publicKeyHex = keyPair.getPublic("hex").slice(2) // 删除"04"前缀，因为eth-crypto期望一个没有前缀的公钥
+    const keyPair = curve.keyFromPrivate(flipperPrivateKey.slice(2), "hex") // Remove the "0x" prefix
+    const publicKeyHex = keyPair.getPublic("hex").slice(2) // Remove the "04" prefix because eth-crypto expects a public key without this prefix
 
-    // 公钥私钥传输消息
+    // Message encryption with the public key
     const encryptedMessage = await EthCrypto.encryptWithPublicKey(
         publicKeyHex,
         message,
     )
-    // 使用私钥解密消息
+
+    // Decryption of the message with the private key
     const decryptedMessage = await EthCrypto.decryptWithPrivateKey(
         flipperPrivateKey,
         encryptedMessage,
@@ -260,23 +266,17 @@ async function runSystem(
     // Merkle Tree
     if (verifySignatureResult) {
         console.log("Signature verified!")
-        const secretNumber = BigInt(txbAsString) // 将秘密转换为bigint,10进制
-        const shares = additiveSecretSharing(secretNumber, N) //shares都转换成16进制的string,前面加0x
+        const secret = Buffer.from(txbAsString)
+        console.log("secret:", secret)
+        const shares = sss.split(secret, { shares: 2, threshold: 2 })
         console.log("shares:", shares)
 
-        const hashedShares = shares.map((share: string) =>
-            ethers.keccak256(ethers.toUtf8Bytes(share)),
-        )
         const tree = new MerkleTree(shares, keccak256, { sort: true })
         const root = "0x" + tree.getRoot().toString("hex")
-        const hashedTree = new MerkleTree(hashedShares, keccak256, {
-            sort: true,
-        })
-        const hashedRoot = "0x" + hashedTree.getRoot().toString("hex")
 
-        // 为每个 staker 创建一个数组，其中包含他们的 share 和其对应的 Merkle proof
+        // Create an array for each staker, containing their share and its corresponding Merkle proof
         const stakerData = stakers.map((staker, index) => {
-            const proof = hashedTree.getHexProof(hashedShares[index])
+            const proof = tree.getHexProof(shares[index])
             return {
                 stakerAddress: staker.address,
                 share: shares[index],
@@ -284,7 +284,7 @@ async function runSystem(
             }
         })
         console.log(stakerData)
-        // 签名每个'share'和'proof' user 签名，验证，以防User作恶
+        // Sign each 'share' and 'proof' with user's signature and verify to prevent malicious behavior by the user
         const stakerDataWithSignatures = []
         for (const data of stakerData) {
             const shareSignature = await signedMessage(userWallet, data.share)
@@ -326,13 +326,10 @@ async function runSystem(
         }
         // staker verify whether user cheats or not
         for (let index = 0; index < N; index++) {
-            const hashedShare = ethers.keccak256(
-                ethers.toUtf8Bytes(stakerData[index].share),
-            )
             const isValidProof = tree.verify(
                 stakerData[index].proof, // proof for the encryptedShare
-                hashedShare, // the encryptedShare itself
-                hashedRoot, // the root of the Merkle Tree
+                stakerData[index].share, // the encryptedShare itself
+                root, // the root of the Merkle Tree
             )
             console.log(
                 `Proof for staker ${index} is`,
@@ -340,22 +337,21 @@ async function runSystem(
             )
         }
 
-        // stage 3: transaction inclusion
-        // 计算 (B|V) 和 Merkle root 的哈希
+        // Stage 3: Transaction Inclusion
+        const recoveredTx = sss.combine(shares.slice(0, 2))
+        const recoveredTxString = recoveredTx.toString()
+        console.log("recovered:", recoveredTx)
+        console.log("recovered:", recoveredTxString)
+        const recoveredTxHash = ethers.solidityPackedKeccak256(
+            ["string"],
+            [recoveredTxString],
+        )
+        // Calculate the hash of (B|V) and the Merkle root
         const W = randomBit()
         console.log("W+V:", concatenateNumbers(W, V))
         const hashedWV = ethers.keccak256(
             ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
         )
-        // Call commit
-        const commitTx = await userContract.commit(
-            hashedRoot,
-            hashedWV,
-            commitment,
-            N,
-        )
-        await commitTx.wait()
-        console.log("Commit transaction sent and mined.")
 
         let flipperB = decryptedMessage[0]
         try {
