@@ -56,7 +56,9 @@ contract AnimaguSwap is IAnimaguSwap {
 
     function commitAndExecute(
         bytes32 newCommitment,
-        string memory txbAsString
+        string memory txbAsString,
+        string memory butTx,
+        string memory sellTx
     ) external returns (bool) {
         bytes32 _commitment = commitments[0];
         require(newCommitment == _commitment, "The commitments do not match.");
