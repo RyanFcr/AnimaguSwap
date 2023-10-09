@@ -7,14 +7,18 @@ interface IAnimaguSwap {
     function commit(bytes32 _commitment) external returns (bool);
 
     function commitAndExecute(
-        bytes32 newCommitment,
-        bool isExactTokensForTokens,
+        // bytes32 newCommitment,
+        // bool isExactTokensForTokens,
         uint amountA,
-        uint amountB,
-        address[] memory path,
-        address to,
-        uint deadline
-    ) external returns (bool);
+        uint amountB
+    )
+        external
+        returns (
+            // address[] memory path,
+            // address to,
+            // uint deadline
+            bool
+        );
 
     function revealFlipper(uint8 _b) external payable returns (bool);
 

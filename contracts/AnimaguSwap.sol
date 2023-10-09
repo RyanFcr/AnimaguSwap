@@ -12,9 +12,10 @@ contract AnimaguSwap is IAnimaguSwap {
     event FlipperRevealed(address indexed sender, uint8 value);
 
     address private constant UNISWAP_V2_ROUTER =
-        0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+        0x86dcd3293C53Cf8EFd7303B57beb2a3F671dDE98;
 
-    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address private constant WETH = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
+    address private constant UNI = 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984;
     address private constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
     address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
@@ -48,25 +49,33 @@ contract AnimaguSwap is IAnimaguSwap {
     }
 
     function commitAndExecute(
-        bytes32 newCommitment,
-        bool isExactTokensForTokens, // 使用这个布尔值来决定调用哪个函数
+        // bytes32 newCommitment,
+        // bool isExactTokensForTokens, // 使用这个布尔值来决定调用哪个函数
         uint amountA,
-        uint amountB,
-        address[] memory path,
-        address to,
-        uint deadline
-    ) external override returns (bool) {
-        require(
-            revealedBSet,
-            "revealedB must be set before executing this function"
-        );
+        uint amountB
+    )
+        external
+        override
+        returns (
+            // address[] memory path,
+            // address to,
+            // uint deadline
+            bool
+        )
+    {
+        // require(
+        //     revealedBSet,
+        //     "revealedB must be set before executing this function"
+        // );
         weth.transferFrom(msg.sender, address(this), amountA);
         weth.approve(address(router), amountA);
 
         address[] memory path;
         path = new address[](2);
         path[0] = WETH;
-        path[1] = DAI;
+        path[1] = UNI;
+        console.log("path: ", path[0]);
+        console.log("path: ", path[1]);
 
         // bytes32 _commitment = commitments[0];
         // require(newCommitment == _commitment, "The commitments do not match.");
@@ -75,26 +84,28 @@ contract AnimaguSwap is IAnimaguSwap {
         // 此处等待revealFlipper被调用
         // 注意: Solidity合约不能真正地"等待"，你需要通过其他机制来实现这一功能
 
-        if (
-            (isExactTokensForTokens && revealedB == 0) &&
-            (!isExactTokensForTokens && revealedB == 1)
-        ) {
-            uint[] memory amounts = router.swapExactTokensForTokens(
-                amountA,
-                amountB,
-                path,
-                msg.sender,
-                block.timestamp
-            );
-        } else {
-            uint[] memory amounts = router.swapExactTokensForTokens(
-                amountA,
-                amountB,
-                path,
-                msg.sender,
-                block.timestamp
-            );
-        }
+        // if (
+        //     (isExactTokensForTokens && revealedB == 0) &&
+        //     (!isExactTokensForTokens && revealedB == 1)
+        // ) {
+        uint[] memory amounts = router.swapExactTokensForTokens(
+            amountA,
+            amountB,
+            path,
+            msg.sender,
+            block.timestamp
+        );
+        console.log("amounts: ", amounts[0]);
+        console.log("amounts: ", amounts[1]);
+        // } else {
+        //     router.swapExactTokensForTokens(
+        //         amountA,
+        //         amountB,
+        //         path,
+        //         msg.sender,
+        //         block.timestamp
+        //     );
+        // }
 
         return true;
     }

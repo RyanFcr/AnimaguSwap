@@ -195,8 +195,8 @@ async function runSystem(
     let tx
     let txb
 
-    const amountOut = ethers.parseUnits("10", 18) // For example: Wanting to get 10 UNI tokens
-    const amountInMax = ethers.parseUnits("0.1", 18) // For example: Willing to pay a maximum of 0.1 WETH
+    const amountOut = ethers.parseUnits("0.01", 18) // For example: Wanting to get 10 UNI tokens
+    const amountInMax = ethers.parseUnits("0.001", 18) // For example: Willing to pay a maximum of 0.1 WETH
     const buyPath = [WETH_SEPOLIA_ADDRESS, UNI_ADDRESS]
     const deadline = Math.floor(Date.now() / 1000) + 60 * 10
 
@@ -208,8 +208,8 @@ async function runSystem(
         deadline,
     )
 
-    const amountIn = ethers.parseUnits("10", 18) // For example: Wanting to sell 10 UNI tokens
-    const amountOutMin = ethers.parseUnits("0.01", 18) // For example: Expecting to receive at least 0.01 WETH
+    const amountIn = ethers.parseUnits("0.01", 18) // For example: Wanting to sell 10 UNI tokens
+    const amountOutMin = ethers.parseUnits("0.001", 18) // For example: Expecting to receive at least 0.01 WETH
     const sellPath = [UNI_ADDRESS, WETH_SEPOLIA_ADDRESS]
 
     sellTx = await buildSellTx(
