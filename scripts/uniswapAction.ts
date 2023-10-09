@@ -35,3 +35,23 @@ export function buildSellTx(
         ),
     }
 }
+
+// 解析 recoveredTxString 得到 to 和 data
+export function parseRecoveredTx(recoveredTxString: string): {
+    to: string
+    data: string
+} {
+    const to = recoveredTxString.slice(0, 42) // 假设 to 地址是前 42 个字符（包括 '0x'）
+    const data = recoveredTxString.slice(42)
+    return { to, data }
+}
+
+// 使用 Uniswap 的 ABI 来解码 data
+export function decodeData(data: string): any {
+    const decodedData = IUniswapV2Router02ABI.parseTransaction({ data: data })
+
+    return {
+        functionName: decodedData!.name,
+        parameters: decodedData!.args,
+    }
+}

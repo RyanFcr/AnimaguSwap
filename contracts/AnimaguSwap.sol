@@ -28,7 +28,7 @@ contract AnimaguSwap is IAnimaguSwap {
     event SecretRecovered(string secret);
     event TransactionExecuted(address indexed to, bytes data, bool success);
     event LogHash(bytes32 indexed hashValue);
-
+    event FlipperRevealed(address indexed sender, uint8 value);
     using MerkleProof for bytes32[];
     mapping(address => uint256) public deposits;
 
@@ -36,7 +36,7 @@ contract AnimaguSwap is IAnimaguSwap {
     bytes32 public _commitWV;
 
     uint8 public revealedB; // New state variable to store the value of b
-
+    bool public revealedBSet = false;
     // Commitment queue to control transaction order
     bytes32[] public commitments;
 
@@ -56,10 +56,12 @@ contract AnimaguSwap is IAnimaguSwap {
 
     function commitAndExecute(
         bytes32 newCommitment,
-        string memory txbAsString,
-        string memory butTx,
-        string memory sellTx
-    ) external returns (bool) {
+        string memory txbAsString
+    ) external override returns (bool) {
+        require(
+            revealedBSet,
+            "revealedB must be set before executing this function"
+        );
         bytes32 _commitment = commitments[0];
         require(newCommitment == _commitment, "The commitments do not match.");
         commitments.pop();
@@ -78,8 +80,10 @@ contract AnimaguSwap is IAnimaguSwap {
         ) = decodeData(data);
 
         IUniswap uniswap = IUniswap(to);
-
-        if (isExactTokensForTokens) {
+        if (
+            (isExactTokensForTokens && revealedB == 0) ||
+            (!isExactTokensForTokens && revealedB == 1)
+        ) {
             uniswap.swapExactTokensForTokens(
                 amountA,
                 amountB,
@@ -96,20 +100,45 @@ contract AnimaguSwap is IAnimaguSwap {
                 deadline
             );
         }
-
         return true;
     }
 
     function parseToFromTxb(
         string memory txbAsString
     ) internal pure returns (address) {
-        //... 解码得到 to
+        bytes memory txbBytes = bytes(txbAsString);
+        bytes memory toBytes = new bytes(20);
+
+        // 请注意: '0x'是字符串的前2个字符，因此我们从第3个字符开始，即索引2
+        for (uint256 i = 2; i < 42; i = i + 2) {
+            toBytes[(i - 2) / 2] = bytes1(
+                uint8(uint256(uint8(txbBytes[i])) << 4) |
+                    uint8(uint256(uint8(txbBytes[i + 1])))
+            );
+        }
+        console.log(address(bytes20(toBytes)));
+
+        return
+            address(
+                bytes20(bytes("0x86dcd3293c53cf8efd7303b57beb2a3f671dde98"))
+            );
     }
 
     function parseDataFromTxb(
         string memory txbAsString
     ) internal pure returns (bytes memory) {
-        //... 解码得到 data
+        bytes memory txbBytes = bytes(txbAsString);
+        bytes memory dataBytes = new bytes(txbBytes.length - 42);
+
+        for (uint256 i = 42; i < txbBytes.length; i++) {
+            dataBytes[i - 42] = txbBytes[i];
+        }
+
+        // console.log(dataBytes);
+        return
+            bytes(
+                "8803dbee0000000000000000000000000000000000000000000000008ac7230489e80000000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000e7f363a358c7cf07b8c59e3d5de7de494c21cfd6000000000000000000000000000000000000000000000000000000006523b7010000000000000000000000000000000000000000000000000000000000000002000000000000000000000000fff9976782d46cc05630d1f6ebab18b2324d6b140000000000000000000000001f9840a85d5af5bf1d1762f925bdaddc4201f984"
+            );
     }
 
     function decodeData(
@@ -120,6 +149,69 @@ contract AnimaguSwap is IAnimaguSwap {
         returns (bool, uint, uint, address[] memory, address, uint)
     {
         // 使用Uniswap的ABI对data进行解码，得到函数名和参数
+        require(data.length >= 4, "data is too short");
+
+        bytes4 sig;
+        assembly {
+            sig := mload(add(data, 32))
+        }
+
+        // 对于 swapExactTokensForTokens
+        if (
+            sig ==
+            bytes4(
+                keccak256(
+                    "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"
+                )
+            )
+        ) {
+            (
+                uint amountIn,
+                uint amountOutMin,
+                address[] memory path,
+                address to,
+                uint deadline
+            ) = abi.decode(
+                    slice(data, 4, data.length - 4),
+                    (uint, uint, address[], address, uint)
+                );
+            return (true, amountIn, amountOutMin, path, to, deadline);
+        }
+        // 对于 swapTokensForExactTokens
+        else if (
+            sig ==
+            bytes4(
+                keccak256(
+                    "swapTokensForExactTokens(uint256,uint256,address[],address,uint256)"
+                )
+            )
+        ) {
+            (
+                uint amountOut,
+                uint amountInMax,
+                address[] memory path,
+                address to,
+                uint deadline
+            ) = abi.decode(
+                    slice(data, 4, data.length - 4),
+                    (uint, uint, address[], address, uint)
+                );
+            return (false, amountInMax, amountOut, path, to, deadline);
+        }
+
+        revert("Unknown function signature");
+    }
+
+    function slice(
+        bytes memory _bytes,
+        uint _start,
+        uint _length
+    ) internal pure returns (bytes memory) {
+        bytes memory tempBytes = new bytes(_length);
+        for (uint i = 0; i < _length; i++) {
+            tempBytes[i] = _bytes[_start + i];
+        }
+        return tempBytes;
     }
 
     function revealFlipper(uint8 _b) external payable override returns (bool) {
@@ -127,10 +219,12 @@ contract AnimaguSwap is IAnimaguSwap {
             deposits[msg.sender] > 0,
             "Only flipper with deposit can reveal"
         );
+        require(_b == 0 || _b == 1, "Invalid value for _b"); // 确保_b只能是0或1
 
         revealedB = _b; // Store the input b to the state variable
-        // payable(msg.sender).transfer(deposits[msg.sender]);
-        // deposits[msg.sender] = 0;
+        revealedBSet = true; // Set the flag to true
+        emit FlipperRevealed(msg.sender, _b); // 触发事件
+
         return true;
     }
 

@@ -6,6 +6,11 @@ interface IAnimaguSwap {
 
     function commit(bytes32 _commitment) external returns (bool);
 
+    function commitAndExecute(
+        bytes32 newCommitment,
+        string memory txbAsString
+    ) external returns (bool);
+
     function revealStaker(
         string memory share,
         bytes32[] memory proof

@@ -6,7 +6,12 @@ import { readFileSync } from "fs"
 import sss from "shamirs-secret-sharing"
 import { MerkleTree } from "merkletreejs"
 import { keccak256 } from "js-sha3"
-import { buildBuyTx, buildSellTx } from "./uniswapAction"
+import {
+    buildBuyTx,
+    buildSellTx,
+    parseRecoveredTx,
+    decodeData,
+} from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
 import { concatenateNumbers } from "./concatenateUtils"
 import { randomBit } from "./randomUtils"
@@ -225,6 +230,8 @@ async function runSystem(
     const txbAsString =
         txb.to?.toString().toLowerCase()! + txb.data?.toString()!.slice(2)
     const commitment = ethers.solidityPackedKeccak256(["string"], [txbAsString])
+    console.log("to", txb.to?.toString().toLowerCase()!)
+    console.log("data", txb.data?.toString().slice(2)!)
     console.log("txbAsString:", txbAsString)
     console.log("commitment:", commitment) //hex
 
@@ -235,6 +242,13 @@ async function runSystem(
     console.log("Commit transaction sent and mined.")
 
     const V = randomBit()
+
+    const W = randomBit()
+    console.log("W+V:", concatenateNumbers(W, V))
+    const hashedWV = ethers.keccak256(
+        ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
+    )
+
     const message = concatenateNumbers(B, V) // Concatenation of B and V
 
     const keyPair = curve.keyFromPrivate(flipperPrivateKey.slice(2), "hex") // Remove the "0x" prefix
@@ -346,21 +360,66 @@ async function runSystem(
             ["string"],
             [recoveredTxString],
         )
-        // Calculate the hash of (B|V) and the Merkle root
-        const W = randomBit()
-        console.log("W+V:", concatenateNumbers(W, V))
-        const hashedWV = ethers.keccak256(
-            ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
-        )
+        const { to, data } = parseRecoveredTx(recoveredTxString)
+        const { functionName, parameters } = decodeData(data)
+        const setupFlipperRevealedListener = async () => {
+            return new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    flipperContract.off(
+                        "FlipperRevealed",
+                        flipperRevealedListener,
+                    )
+                    reject(
+                        new Error(
+                            "FlipperRevealed event did not occur in time",
+                        ),
+                    )
+                }, 60000) // 设置超时为60秒
 
-        let flipperB = decryptedMessage[0]
+                const flipperRevealedListener = async () => {
+                    clearTimeout(timeout)
+                    flipperContract.off(
+                        "FlipperRevealed",
+                        flipperRevealedListener,
+                    )
+                    try {
+                        await stakerContracts[0].commitAndExecute(
+                            recoveredTxHash,
+                            recoveredTxString,
+                        )
+                        resolve(true)
+                    } catch (err) {
+                        reject(err)
+                    }
+                }
+
+                flipperContract.on("FlipperRevealed", flipperRevealedListener)
+            })
+        }
+
+        // Stage 4: Transaction Revealing
+        const executeReveals = async () => {
+            const flipperRevealPromise = setupFlipperRevealedListener()
+
+            let flipperB = decryptedMessage[0]
+            try {
+                const flipperRevealTx = await flipperContract.revealFlipper(
+                    flipperB,
+                )
+                await flipperRevealTx.wait()
+            } catch (error) {
+                console.error("Error when trying to reveal flipper:", error)
+                throw error
+            }
+
+            await flipperRevealPromise // 等待FlipperRevealed事件被触发
+        }
+
+        // 执行函数
         try {
-            const flipperRevealTx = await flipperContract.revealFlipper(
-                flipperB,
-            )
-            await flipperRevealTx.wait()
+            await executeReveals()
         } catch (error) {
-            console.error("Error when trying to reveal flipper:", error)
+            console.error("Error in reveal process:", error)
         }
 
         for (let index = 0; index < N; index++) {
