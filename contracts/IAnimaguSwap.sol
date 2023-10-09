@@ -8,13 +8,13 @@ interface IAnimaguSwap {
 
     function commitAndExecute(
         bytes32 newCommitment,
-        string memory txbAsString
+        bool isExactTokensForTokens,
+        uint amountA,
+        uint amountB,
+        address[] memory path,
+        address to,
+        uint deadline
     ) external returns (bool);
-
-    function revealStaker(
-        string memory share,
-        bytes32[] memory proof
-    ) external payable returns (bool);
 
     function revealFlipper(uint8 _b) external payable returns (bool);
 

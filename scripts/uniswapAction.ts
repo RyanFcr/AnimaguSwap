@@ -35,23 +35,39 @@ export function buildSellTx(
         ),
     }
 }
+// 编码 TransactionRequest 为十六进制
+export function encodeTransactionToHex(tx: ethers.TransactionRequest): string {
+    return tx.to?.toString()! + tx.data?.toString()!.slice(2)
+}
 
-// 解析 recoveredTxString 得到 to 和 data
-export function parseRecoveredTx(recoveredTxString: string): {
-    to: string
-    data: string
-} {
-    const to = recoveredTxString.slice(0, 42) // 假设 to 地址是前 42 个字符（包括 '0x'）
-    const data = recoveredTxString.slice(42)
-    return { to, data }
+// 从十六进制解码到 TransactionRequest
+export function decodeHexToTransaction(
+    hexString: string,
+): ethers.TransactionRequest {
+    let to = "0x" + hexString.substring(2, 42) // 地址长度为 42 个字符 (包括 "0x" 前缀)
+    let data = "0x" + hexString.substring(42)
+
+    // 从十六进制字符串创建 TransactionRequest 对象
+    let tx: ethers.TransactionRequest = {
+        to: to,
+        data: data,
+    }
+
+    return tx
 }
 
 // 使用 Uniswap 的 ABI 来解码 data
-export function decodeData(data: string): any {
-    const decodedData = IUniswapV2Router02ABI.parseTransaction({ data: data })
+export function decodeData(tx: ethers.TransactionRequest) {
+    if (!tx.data) {
+        throw new Error("Transaction data is missing")
+    }
+    const _decodedData = IUniswapV2Router02ABI.parseTransaction({
+        data: tx.data.toString(),
+    })
+    console.log("decodedData:", _decodedData)
 
     return {
-        functionName: decodedData!.name,
-        parameters: decodedData!.args,
+        functionName: _decodedData!.name,
+        parameters: _decodedData!.args.toArray(),
     }
 }

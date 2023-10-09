@@ -1,4 +1,5 @@
 import { ethers } from "hardhat"
+import { Contract, Interface } from "ethers"
 import * as fs from "fs"
 import * as path from "path"
 import { readFileSync } from "fs"
@@ -9,7 +10,8 @@ import { keccak256 } from "js-sha3"
 import {
     buildBuyTx,
     buildSellTx,
-    parseRecoveredTx,
+    encodeTransactionToHex,
+    decodeHexToTransaction,
     decodeData,
 } from "./uniswapAction"
 import { signedMessage, verifySignature } from "./signatureUtils"
@@ -17,6 +19,7 @@ import { concatenateNumbers } from "./concatenateUtils"
 import { randomBit } from "./randomUtils"
 import { ec } from "elliptic"
 import * as EthCrypto from "eth-crypto"
+import IUniswapV2Router02 from "@uniswap/v2-periphery/build/IUniswapV2Router02.json"
 
 const curve = new ec("secp256k1")
 async function main() {
@@ -25,6 +28,7 @@ async function main() {
     const N = 2 // N is the number of stakers
     const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
     const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+    // const IUniswapV2Router02ABI = new Interface(IUniswapV2Router02.abi)
 
     const flipperPrivateKey = process.env[`PRIVATE_KEY_${0}`]
     if (!flipperPrivateKey) {
@@ -109,7 +113,7 @@ async function runSystem(
         ANIMAGUSWAP_ABI,
         flipperWallet,
     )
-    const stakerContracts: any[] = []
+    const stakerContracts: Contract[] = []
     for (let index = 0; index < N; index++) {
         const privateKey = process.env[`PRIVATE_KEY_${index + 1}`]
         if (!privateKey) {
@@ -128,35 +132,34 @@ async function runSystem(
             )
         }
     }
-    for (let i = 0; i <= N; i++) {
-        const depositAmount = ethers.parseEther("0.001") // or the amount you want to deposit
-        let depositWallet, depositContract
-        if (i == 0) {
-            depositWallet = flipperWallet
-            depositContract = flipperContract
-        } else {
-            depositWallet = stakerWallets[i - 1]
-            depositContract = stakerContracts[i - 1]
-        }
-
-        let balanceBefore = await provider.getBalance(depositWallet.address)
-        console.log(
-            `Staker ${i} balance: ${parseFloat(
-                ethers.formatEther(balanceBefore),
-            ).toFixed(8)}`,
-        )
-        const depositTx = await depositContract.deposit(depositAmount, {
-            value: depositAmount,
-        })
-        await depositTx.wait()
-        console.log(`Deposited for staker ${depositWallet.address}`)
-        let balanceAfter = await provider.getBalance(depositWallet.address)
-        console.log(
-            `Staker ${i} balance: ${parseFloat(
-                ethers.formatEther(balanceAfter),
-            ).toFixed(8)}`,
-        )
-    }
+    // for (let i = 0; i <= N; i++) {
+    // const depositAmount = ethers.parseEther("0.001") // or the amount you want to deposit
+    // let depositWallet, depositContract
+    // if (i == 0) {
+    //     depositWallet = flipperWallet
+    //     depositContract = flipperContract
+    // } else {
+    //     depositWallet = stakerWallets[i - 1]
+    //     depositContract = stakerContracts[i - 1]
+    // }
+    // let balanceBefore = await provider.getBalance(depositWallet.address)
+    // console.log(
+    //     `Staker ${i} balance: ${parseFloat(
+    //         ethers.formatEther(balanceBefore),
+    //     ).toFixed(8)}`,
+    // )
+    // const depositTx = await depositContract.deposit(depositAmount, {
+    //     value: depositAmount,
+    // })
+    // await depositTx.wait()
+    // console.log(`Deposited for staker ${depositWallet.address}`)
+    // let balanceAfter = await provider.getBalance(depositWallet.address)
+    // console.log(
+    //     `Staker ${i} balance: ${parseFloat(
+    //         ethers.formatEther(balanceAfter),
+    //     ).toFixed(8)}`,
+    // )
+    // }
 
     //DAI：USDT = 1:1
     //BUY(Y, X, Δr_Y, Δr_X, s, md)=SwapTokensforExactTokens
@@ -224,15 +227,16 @@ async function runSystem(
     else if (random == 0) txb = sellTx
     else txb = buyTx
 
-    const stringBuyTx = buyTx.to?.toString()! + buyTx.data?.toString()!.slice(2)
-    const stringSellTx =
-        sellTx.to?.toString()! + sellTx.to?.toString()!.slice(2)
-    const txbAsString =
-        txb.to?.toString().toLowerCase()! + txb.data?.toString()!.slice(2)
+    console.log("txb", txb)
+    const stringBuyTx = encodeTransactionToHex(buyTx)
+    const stringSellTx = encodeTransactionToHex(sellTx)
+    const txbAsString = encodeTransactionToHex(txb)
+    const txprime = decodeHexToTransaction(txbAsString)
     const commitment = ethers.solidityPackedKeccak256(["string"], [txbAsString])
     console.log("to", txb.to?.toString().toLowerCase()!)
     console.log("data", txb.data?.toString().slice(2)!)
     console.log("txbAsString:", txbAsString)
+    console.log("txprime:", txprime)
     console.log("commitment:", commitment) //hex
 
     // Stage2: transaction submission
@@ -360,75 +364,60 @@ async function runSystem(
             ["string"],
             [recoveredTxString],
         )
-        const { to, data } = parseRecoveredTx(recoveredTxString)
-        const { functionName, parameters } = decodeData(data)
-        const setupFlipperRevealedListener = async () => {
-            return new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    flipperContract.off(
-                        "FlipperRevealed",
-                        flipperRevealedListener,
-                    )
-                    reject(
-                        new Error(
-                            "FlipperRevealed event did not occur in time",
-                        ),
-                    )
-                }, 60000) // 设置超时为60秒
-
-                const flipperRevealedListener = async () => {
-                    clearTimeout(timeout)
-                    flipperContract.off(
-                        "FlipperRevealed",
-                        flipperRevealedListener,
-                    )
-                    try {
-                        await stakerContracts[0].commitAndExecute(
-                            recoveredTxHash,
-                            recoveredTxString,
-                        )
-                        resolve(true)
-                    } catch (err) {
-                        reject(err)
-                    }
-                }
-
-                flipperContract.on("FlipperRevealed", flipperRevealedListener)
-            })
-        }
-
-        // Stage 4: Transaction Revealing
-        const executeReveals = async () => {
-            const flipperRevealPromise = setupFlipperRevealedListener()
-
-            let flipperB = decryptedMessage[0]
-            try {
-                const flipperRevealTx = await flipperContract.revealFlipper(
-                    flipperB,
-                )
-                await flipperRevealTx.wait()
-            } catch (error) {
-                console.error("Error when trying to reveal flipper:", error)
-                throw error
-            }
-
-            await flipperRevealPromise // 等待FlipperRevealed事件被触发
-        }
-
-        // 执行函数
+        const decodedRecoveredTx = decodeHexToTransaction(recoveredTxString)
+        const { functionName, parameters } = decodeData(decodedRecoveredTx)
+        console.log("to:", decodedRecoveredTx.to)
+        console.log("data:", decodedRecoveredTx.data)
+        console.log("functionName:", functionName)
+        console.log("parameters:", parameters)
+        console.log("Type:", typeof parameters)
+        // parameters as object
+        const clonedParameters = [...parameters]
+        console.log(clonedParameters.length)
+        console.log("clonedParameters", clonedParameters)
+        console.log("Type", typeof clonedParameters)
+        console.log(clonedParameters.at(0))
+        console.log(clonedParameters.at(1))
+        console.log(clonedParameters.at(2))
+        console.log(clonedParameters.at(3))
+        console.log(clonedParameters.at(4))
+        const isExactTokensForTokens =
+            functionName === "swapExactTokensForTokens"
+        console.log("isExactTokensForTokens:", isExactTokensForTokens)
+        let flipperB = decryptedMessage[0]
         try {
-            await executeReveals()
-        } catch (error) {
-            console.error("Error in reveal process:", error)
-        }
-
-        for (let index = 0; index < N; index++) {
-            const stakerRevealTx = await stakerContracts[index].revealStaker(
-                stakerData[index].share,
-                stakerData[index].proof,
+            const flipperRevealTx = await flipperContract.revealFlipper(
+                flipperB,
             )
-            await stakerRevealTx.wait()
+            await flipperRevealTx.wait()
+        } catch (error) {
+            console.error("Error when trying to reveal flipper:", error)
+            throw error
         }
+        console.log("Flipper revealed!")
+        const privateKey = process.env[`PRIVATE_KEY_${1}`]
+        const wallet = privateKey
+            ? new ethers.Wallet(privateKey, provider)
+            : undefined
+        const contract = new ethers.Contract(
+            ANIMAGUSWAP_ADDRESS,
+            ANIMAGUSWAP_ABI,
+            wallet,
+        )
+        const amountA: BigInt = clonedParameters.at(0)
+        const amountB: BigInt = clonedParameters.at(1)
+        const commitAndExecuteTx = await contract.commitAndExecute(
+            recoveredTxHash,
+            isExactTokensForTokens,
+            amountOut,
+            amountInMax,
+            buyPath,
+            userWallet,
+            deadline,
+        )
+        await commitAndExecuteTx.wait()
+        console.log("Staker committed and executed!")
+        // Stage 4: Transaction Revealing
 
         const secretRecoveredListener = (secret: string) => {
             console.log(`Secret recovered: ${secret}`)
