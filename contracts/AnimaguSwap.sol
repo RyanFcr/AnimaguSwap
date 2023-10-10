@@ -45,11 +45,9 @@ contract AnimaguSwap {
     function commitAndExecute(
         bytes32 newCommitment,
         bool isExactTokensForTokens, // 使用这个布尔值来决定调用哪个函数
-        address _tokenIn,
-        address _tokenOut,
+        address[] memory path,
         uint amountA,
         uint amountB,
-        // address[] memory path,
         address to
     ) external returns (bool) {
         require(
@@ -62,46 +60,103 @@ contract AnimaguSwap {
 
         // Step 1: Ensure the user has granted enough allowance for the transfer
 
-        require(
-            IERC20(_tokenIn).transferFrom(to, address(this), amountA),
-            "transferFrom failed"
-        );
-        require(
-            IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountA),
-            "approve failed"
-        );
         console.log("1");
-        address[] memory path;
-        if (_tokenIn == WETH || _tokenOut == WETH) {
-            path = new address[](2);
-            path[0] = _tokenIn;
-            path[1] = _tokenOut;
-        } else {
-            path = new address[](3);
-            path[0] = _tokenIn;
-            path[1] = WETH;
-            path[2] = _tokenOut;
-        }
 
-        if (
-            (isExactTokensForTokens && revealedB == 0) ||
-            (!isExactTokensForTokens && revealedB == 1)
-        ) {
-            IUniswapV2Router(UNISWAP_V2_ROUTER).swapExactTokensForTokens(
-                amountA,
-                amountB,
-                path,
-                to,
-                block.timestamp
-            );
+        if (revealedB == 0) {
+            if (isExactTokensForTokens == true) {
+                //sell
+                address _tokenIn = path[0];
+                console.log("_tokenIn: ", _tokenIn);
+                console.log("amountA: ", amountA);
+                console.log("amountB: ", amountB);
+                require(
+                    IERC20(_tokenIn).transferFrom(to, address(this), amountA),
+                    "transferFrom failed"
+                );
+                require(
+                    IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountA),
+                    "approve failed"
+                );
+                IUniswapV2Router(UNISWAP_V2_ROUTER).swapExactTokensForTokens(
+                    amountA,
+                    amountB,
+                    path,
+                    to,
+                    block.timestamp
+                );
+            } else {
+                //buy
+                address _tokenIn = path[0];
+                console.log("_tokenIn: ", _tokenIn);
+                console.log("amountA: ", amountA);
+                console.log("amountB: ", amountB);
+                require(
+                    IERC20(_tokenIn).transferFrom(to, address(this), amountB),
+                    "transferFrom failed"
+                );
+                require(
+                    IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountB),
+                    "approve failed"
+                );
+                IUniswapV2Router(UNISWAP_V2_ROUTER).swapTokensForExactTokens(
+                    amountA,
+                    amountB,
+                    path,
+                    to,
+                    block.timestamp
+                );
+            }
         } else {
-            //     router.swapExactTokensForTokens(
-            //         amountA,
-            //         amountB,
-            //         path,
-            //         msg.sender,
-            //         block.timestamp
-            // );
+            address[] memory flipperPath;
+            console.log(path.length);
+            flipperPath = new address[](path.length);
+            for (uint i = 0; i < path.length; i++) {
+                flipperPath[i] = path[path.length - 1 - i];
+                console.log("flipperPath: ", flipperPath[i]);
+            }
+            if (isExactTokensForTokens == true) {
+                //sell->buy
+                address _tokenIn = flipperPath[0];
+                console.log("_tokenIn: ", _tokenIn);
+                console.log("amountA: ", amountA);
+                console.log("amountB: ", amountB);
+                require(
+                    IERC20(_tokenIn).transferFrom(to, address(this), amountA),
+                    "transferFrom failed"
+                );
+                require(
+                    IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountA),
+                    "approve failed"
+                );
+                IUniswapV2Router(UNISWAP_V2_ROUTER).swapTokensForExactTokens(
+                    amountB,
+                    amountA,
+                    flipperPath,
+                    to,
+                    block.timestamp
+                );
+            } else {
+                //buy->sell
+                address _tokenIn = flipperPath[0];
+                console.log("_tokenIn: ", _tokenIn);
+                console.log("amountA: ", amountA);
+                console.log("amountB: ", amountB);
+                require(
+                    IERC20(_tokenIn).transferFrom(to, address(this), amountB),
+                    "transferFrom failed"
+                );
+                require(
+                    IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountB),
+                    "approve failed"
+                );
+                IUniswapV2Router(UNISWAP_V2_ROUTER).swapExactTokensForTokens(
+                    amountB,
+                    amountA,
+                    flipperPath,
+                    to,
+                    block.timestamp
+                );
+            }
         }
 
         (bool success, ) = msg.sender.call{value: address(this).balance}("");
@@ -148,49 +203,6 @@ contract AnimaguSwap {
         payable(msg.sender).transfer(deposits[msg.sender]);
         deposits[msg.sender] = 0;
         return true;
-    }
-
-    function recoverAndExecute(
-        string memory buyTx,
-        string memory sellTx
-    ) external payable {
-        // string memory secret = removeLeadingZerosFromSecondPosition(
-        //     recoverSecret(sharesArray)
-        // );
-        // emit SecretRecovered(secret);
-        // shareCounter = 0;
-        // bytes32 recoveredHash = keccak256(abi.encodePacked(secret));
-        // bytes32 buyTxHash = keccak256(abi.encodePacked(buyTx));
-        // emit LogHash(recoveredHash);
-        // bytes32 _commitment = commitments[0];
-        // if (recoveredHash == _commitment) {
-        //     // Already verified
-        //     commitments.pop();
-        //     string memory transaction;
-        //     if (revealedB == 1) {
-        //         if (recoveredHash == buyTxHash) {
-        //             transaction = sellTx;
-        //         } else {
-        //             transaction = buyTx;
-        //         }
-        //     } else {
-        //         transaction = secret;
-        //     }
-        //     bytes memory txBytes = bytes(transaction);
-        //     bytes memory to = new bytes(20);
-        //     for (uint256 i = 0; i < 20; i++) {
-        //         to[i] = txBytes[i];
-        //     }
-        //     address toAddress = address(bytes20(to));
-        //     bytes memory data = new bytes(txBytes.length - 20);
-        //     for (uint256 i = 20; i < txBytes.length; i++) {
-        //         data[i - 20] = txBytes[i];
-        //     }
-        //     require(data.length > 0, "No transaction data");
-        //     (bool success, ) = toAddress.call(data);
-        //     emit TransactionExecuted(toAddress, data, success); // Emit an event
-        //     require(success, "Transaction failed");
-        //TODO Add TransactionF
     }
 
     function userComplain(

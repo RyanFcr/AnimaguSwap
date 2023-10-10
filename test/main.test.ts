@@ -124,8 +124,8 @@ describe("AnimaguSwap", function () {
         }
 
         // Stage 1: transaction creation
-        const random: number = 1 //randomBit()
-        const B: number = 0 //randomBit()
+        const random: number = 0 //randomBit()
+        const B: number = 1 //randomBit()
         console.log("Random number:", random)
         console.log("B:", B)
         let buyTx
@@ -135,6 +135,11 @@ describe("AnimaguSwap", function () {
         const deadline = Math.floor(Date.now() / 1000) + 60 * 10
 
         // buy = swapTokensForExactTokens
+        // Receive an exact amount of output tokens for as few input tokens as possible
+        // AMOUT_OUT is exact amount
+        // path[0] = input
+        // path[path.length - 1] = output
+        // DAI -> wBTC
         buyTx = await buildBuyTx(
             AMOUT_OUT,
             AMOUNT_IN_MAX,
@@ -144,6 +149,11 @@ describe("AnimaguSwap", function () {
             deadline,
         )
         // sell = swapExactTokensForTokens
+        // Swaps an exact amount of input tokens for as many output tokens as possible
+        // AMOUNT_IN is exact amount
+        // path[0] = input
+        // path[path.length - 1] = output
+        // wBTC -> DAI
         sellTx = await buildSellTx(
             AMOUNT_IN,
             AMOUNT_OUT_MIN,
@@ -326,6 +336,11 @@ describe("AnimaguSwap", function () {
             const isExactTokensForTokens =
                 functionName === "swapExactTokensForTokens"
             console.log("isExactTokensForTokens:", isExactTokensForTokens)
+            let recoveredPath: string[] = []
+            for (let i = 0; i < clonedParameters[2].length; i++) {
+                recoveredPath[i] = clonedParameters[2][i]
+            }
+
             let flipperB = decryptedMessage[0]
             try {
                 await animaguSwap.connect(flipperWallet).revealFlipper(flipperB)
@@ -366,8 +381,7 @@ describe("AnimaguSwap", function () {
                 .commitAndExecute(
                     recoveredTxHash,
                     isExactTokensForTokens,
-                    wBtcAddress,
-                    daiAddress,
+                    recoveredPath,
                     clonedParameters.at(0),
                     clonedParameters.at(1),
                     clonedParameters.at(3),

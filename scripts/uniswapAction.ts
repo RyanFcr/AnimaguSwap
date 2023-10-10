@@ -15,9 +15,12 @@ export function buildBuyTx(
 ): ethers.TransactionRequest {
     let path: string[]
     if (tokenA == WETH || tokenB == WETH) {
-        path = [tokenA, tokenB]
+        path = [tokenB, tokenA]
     } else {
-        path = [tokenA, WETH, tokenB]
+        path = [tokenB, WETH, tokenA]
+        console.log(path[0])
+        console.log(path[1])
+        console.log(path[2])
     }
 
     return {
@@ -39,9 +42,9 @@ export function buildSellTx(
 ): ethers.TransactionRequest {
     let path: string[]
     if (tokenA == WETH || tokenB == WETH) {
-        path = [tokenB, tokenA]
+        path = [tokenA, tokenB]
     } else {
-        path = [tokenB, WETH, tokenA]
+        path = [tokenA, WETH, tokenB]
     }
     return {
         to: IUniswapV2Router02Address,
