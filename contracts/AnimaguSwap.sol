@@ -1,29 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import {IAnimaguSwap} from "./IAnimaguSwap.sol";
-import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+// import {IAnimaguSwap} from "./IAnimaguSwap.sol";
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "../interfaces/Uniswap.sol";
 
-contract AnimaguSwap is IAnimaguSwap {
-    event SecretRecovered(string secret);
-    event TransactionExecuted(address indexed to, bytes data, bool success);
-    event LogHash(bytes32 indexed hashValue);
-    event FlipperRevealed(address indexed sender, uint8 value);
-
+contract AnimaguSwap {
     address private constant UNISWAP_V2_ROUTER =
-        0x86dcd3293C53Cf8EFd7303B57beb2a3F671dDE98;
+        0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
-    address private constant WETH = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
-    address private constant UNI = 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984;
-    address private constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
-    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    // address private constant UNISWAP_V2_ROUTER =
+    //     0x86dcd3293C53Cf8EFd7303B57beb2a3F671dDE98;
 
-    IUniswapV2Router private router = IUniswapV2Router(UNISWAP_V2_ROUTER);
-    IERC20 private weth = IERC20(WETH);
-    IERC20 private dai = IERC20(DAI);
-
-    using MerkleProof for bytes32[];
+    // address private constant WETH = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
+    // address private constant UNI = 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984;
+    // address private constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
+    // address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     mapping(address => uint256) public deposits;
 
     // Records the commit hash for each participant
@@ -36,108 +30,130 @@ contract AnimaguSwap is IAnimaguSwap {
 
     constructor() {}
 
-    function deposit(uint256 _amount) external payable override returns (bool) {
+    function deposit(uint256 _amount) external payable returns (bool) {
         require(_amount > 0, "Invalid deposit amount");
         require(msg.value == _amount, "Sent value doesn't match the deposit");
         deposits[msg.sender] += _amount;
         return true;
     }
 
-    function commit(bytes32 commitment) external override returns (bool) {
-        // commitments.push(commitment);
+    function commit(bytes32 commitment) external returns (bool) {
+        commitments.push(commitment);
         return true;
     }
 
     function commitAndExecute(
-        // bytes32 newCommitment,
-        // bool isExactTokensForTokens, // 使用这个布尔值来决定调用哪个函数
+        bytes32 newCommitment,
+        bool isExactTokensForTokens, // 使用这个布尔值来决定调用哪个函数
+        address _tokenIn,
+        address _tokenOut,
         uint amountA,
-        uint amountB
-    )
-        external
-        override
-        returns (
-            // address[] memory path,
-            // address to,
-            // uint deadline
-            bool
-        )
-    {
-        // require(
-        //     revealedBSet,
-        //     "revealedB must be set before executing this function"
-        // );
-        weth.transferFrom(msg.sender, address(this), amountA);
-        weth.approve(address(router), amountA);
-
-        address[] memory path;
-        path = new address[](2);
-        path[0] = WETH;
-        path[1] = UNI;
-        console.log("path: ", path[0]);
-        console.log("path: ", path[1]);
-
-        // bytes32 _commitment = commitments[0];
-        // require(newCommitment == _commitment, "The commitments do not match.");
-        // commitments.pop();
-
-        // 此处等待revealFlipper被调用
-        // 注意: Solidity合约不能真正地"等待"，你需要通过其他机制来实现这一功能
-
-        // if (
-        //     (isExactTokensForTokens && revealedB == 0) &&
-        //     (!isExactTokensForTokens && revealedB == 1)
-        // ) {
-        uint[] memory amounts = router.swapExactTokensForTokens(
-            amountA,
-            amountB,
-            path,
-            msg.sender,
-            block.timestamp
+        uint amountB,
+        // address[] memory path,
+        address to
+    ) external returns (bool) {
+        require(
+            revealedBSet,
+            "revealedB must be set before executing this function"
         );
-        console.log("amounts: ", amounts[0]);
-        console.log("amounts: ", amounts[1]);
-        // } else {
-        //     router.swapExactTokensForTokens(
-        //         amountA,
-        //         amountB,
-        //         path,
-        //         msg.sender,
-        //         block.timestamp
-        //     );
-        // }
+        bytes32 _commitment = commitments[0];
+        require(newCommitment == _commitment, "The commitments do not match.");
+        commitments.pop();
 
+        // Step 1: Ensure the user has granted enough allowance for the transfer
+
+        require(
+            IERC20(_tokenIn).transferFrom(to, address(this), amountA),
+            "transferFrom failed"
+        );
+        require(
+            IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountA),
+            "approve failed"
+        );
+        console.log("1");
+        address[] memory path;
+        if (_tokenIn == WETH || _tokenOut == WETH) {
+            path = new address[](2);
+            path[0] = _tokenIn;
+            path[1] = _tokenOut;
+        } else {
+            path = new address[](3);
+            path[0] = _tokenIn;
+            path[1] = WETH;
+            path[2] = _tokenOut;
+        }
+
+        if (
+            (isExactTokensForTokens && revealedB == 0) ||
+            (!isExactTokensForTokens && revealedB == 1)
+        ) {
+            IUniswapV2Router(UNISWAP_V2_ROUTER).swapExactTokensForTokens(
+                amountA,
+                amountB,
+                path,
+                to,
+                block.timestamp
+            );
+        } else {
+            //     router.swapExactTokensForTokens(
+            //         amountA,
+            //         amountB,
+            //         path,
+            //         msg.sender,
+            //         block.timestamp
+            // );
+        }
+
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "Transfer failed.");
+        // console.log("amounts: ", amounts[0]);
+        // console.log("amounts: ", amounts[1]);
         return true;
     }
 
-    function revealFlipper(uint8 _b) external payable override returns (bool) {
-        // require(
-        //     deposits[msg.sender] > 0,
-        //     "Only flipper with deposit can reveal"
-        // );
+    function getAmountOutMin(
+        address _tokenIn,
+        address _tokenOut,
+        uint _amountIn
+    ) external view returns (uint) {
+        address[] memory path;
+        if (_tokenIn == WETH || _tokenOut == WETH) {
+            path = new address[](2);
+            path[0] = _tokenIn;
+            path[1] = _tokenOut;
+        } else {
+            path = new address[](3);
+            path[0] = _tokenIn;
+            path[1] = WETH;
+            path[2] = _tokenOut;
+        }
+
+        // same length as path
+        uint[] memory amountOutMins = IUniswapV2Router(UNISWAP_V2_ROUTER)
+            .getAmountsOut(_amountIn, path);
+
+        return amountOutMins[path.length - 1];
+    }
+
+    function revealFlipper(uint8 _b) external payable returns (bool) {
+        require(
+            deposits[msg.sender] > 0,
+            "Only flipper with deposit can reveal"
+        );
         require(_b == 0 || _b == 1, "Invalid value for _b"); // 确保_b只能是0或1
 
         revealedB = _b; // Store the input b to the state variable
+        console.log("revealedB: ", revealedB);
         revealedBSet = true; // Set the flag to true
-        emit FlipperRevealed(msg.sender, _b); // 触发事件
-
+        payable(msg.sender).transfer(deposits[msg.sender]);
+        deposits[msg.sender] = 0;
         return true;
     }
-
-    // Use the MerkleProof library's verify function for verification
-    // bool isValidProof = MerkleProof.verify(proof, _commitTx, hashedShare);
-
-    // if (isValidProof) {
-    //     payable(msg.sender).transfer(deposits[msg.sender]);
-    //     deposits[msg.sender] = 0;
-    // } else {
-    //     deposits[msg.sender] = 0; // Burn the deposit
-    // }
 
     function recoverAndExecute(
         string memory buyTx,
         string memory sellTx
-    ) external payable override {
+    ) external payable {
         // string memory secret = removeLeadingZerosFromSecondPosition(
         //     recoverSecret(sharesArray)
         // );
@@ -182,7 +198,7 @@ contract AnimaguSwap is IAnimaguSwap {
         bytes32 signature,
         uint8 V,
         uint8 W
-    ) external payable override returns (bool) {
+    ) external payable returns (bool) {
         // Verify W + V hash
         require(W == 0 || W == 1, "W should be 0 or 1");
         require(V == 0 || V == 1, "V should be 0 or 1");
@@ -235,52 +251,4 @@ contract AnimaguSwap is IAnimaguSwap {
             return ecrecover(hash, v, r, s);
         }
     }
-}
-
-interface IUniswapV2Router {
-    function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-
-    function swapTokensForExactTokens(
-        uint amountOut,
-        uint amountInMax,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-}
-
-interface IERC20 {
-    function totalSupply() external view returns (uint);
-
-    function balanceOf(address account) external view returns (uint);
-
-    function transfer(address recipient, uint amount) external returns (bool);
-
-    function allowance(
-        address owner,
-        address spender
-    ) external view returns (uint);
-
-    function approve(address spender, uint amount) external returns (bool);
-
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint amount
-    ) external returns (bool);
-
-    event Transfer(address indexed from, address indexed to, uint value);
-    event Approval(address indexed owner, address indexed spender, uint value);
-}
-
-interface IWETH is IERC20 {
-    function deposit() external payable;
-
-    function withdraw(uint amount) external;
 }

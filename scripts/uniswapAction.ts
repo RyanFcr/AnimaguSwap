@@ -1,37 +1,53 @@
 import { Contract, Interface, ethers } from "ethers"
 import IUniswapV2Router02 from "@uniswap/v2-periphery/build/IUniswapV2Router02.json"
 
-const IUniswapV2Router02Address = "0x86dcd3293C53Cf8EFd7303B57beb2a3F671dDE98"
+const IUniswapV2Router02Address = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
 const IUniswapV2Router02ABI = new Interface(IUniswapV2Router02.abi)
+const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
 export function buildBuyTx(
-    amountOut: bigint,
-    amountInMax: bigint,
-    path: string[],
-    userWallet: any,
+    amountOut: number,
+    amountInMax: number,
+    tokenA: string,
+    tokenB: string,
+    to: string,
     deadline: number,
 ): ethers.TransactionRequest {
+    let path: string[]
+    if (tokenA == WETH || tokenB == WETH) {
+        path = [tokenA, tokenB]
+    } else {
+        path = [tokenA, WETH, tokenB]
+    }
+
     return {
         to: IUniswapV2Router02Address,
         data: IUniswapV2Router02ABI.encodeFunctionData(
             "swapTokensForExactTokens",
-            [amountOut, amountInMax, path, userWallet.address, deadline],
+            [amountOut, amountInMax, path, to, deadline],
         ),
     }
 }
 
 export function buildSellTx(
-    amountIn: bigint,
-    amountOutMin: bigint,
-    path: string[],
-    userWallet: any,
+    amountIn: number,
+    amountOutMin: number,
+    tokenA: string,
+    tokenB: string,
+    to: string,
     deadline: number,
 ): ethers.TransactionRequest {
+    let path: string[]
+    if (tokenA == WETH || tokenB == WETH) {
+        path = [tokenB, tokenA]
+    } else {
+        path = [tokenB, WETH, tokenA]
+    }
     return {
         to: IUniswapV2Router02Address,
         data: IUniswapV2Router02ABI.encodeFunctionData(
             "swapExactTokensForTokens",
-            [amountIn, amountOutMin, path, userWallet.address, deadline],
+            [amountIn, amountOutMin, path, to, deadline],
         ),
     }
 }

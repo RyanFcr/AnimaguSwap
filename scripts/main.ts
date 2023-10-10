@@ -132,6 +132,7 @@ async function runSystem(
             )
         }
     }
+    // Deposit
     // for (let i = 0; i <= N; i++) {
     // const depositAmount = ethers.parseEther("0.001") // or the amount you want to deposit
     // let depositWallet, depositContract
@@ -228,8 +229,6 @@ async function runSystem(
     else txb = buyTx
 
     console.log("txb", txb)
-    const stringBuyTx = encodeTransactionToHex(buyTx)
-    const stringSellTx = encodeTransactionToHex(sellTx)
     const txbAsString = encodeTransactionToHex(txb)
     const txprime = decodeHexToTransaction(txbAsString)
     const commitment = ethers.solidityPackedKeccak256(["string"], [txbAsString])
@@ -407,45 +406,17 @@ async function runSystem(
         const amountA: BigInt = clonedParameters.at(0)
         const amountB: BigInt = clonedParameters.at(1)
         const commitAndExecuteTx = await contract.commitAndExecute(
-            recoveredTxHash,
-            isExactTokensForTokens,
-            amountOut,
-            amountInMax,
-            buyPath,
-            userWallet,
-            deadline,
+            // recoveredTxHash,
+            // isExactTokensForTokens,
+            1e14,
+            1,
+            // buyPath,
+            // userWallet,
+            // deadline,
         )
         await commitAndExecuteTx.wait()
         console.log("Staker committed and executed!")
         // Stage 4: Transaction Revealing
-
-        const secretRecoveredListener = (secret: string) => {
-            console.log(`Secret recovered: ${secret}`)
-            userContract.off("SecretRecovered", secretRecoveredListener)
-        }
-        const recoveredHashListener = (hash: string) => {
-            console.log(`Hash recovered: ${hash}`)
-            userContract.off("LogHash", recoveredHashListener)
-        }
-        const transactionExecutedListener = (
-            to: string,
-            data: string,
-            success: boolean,
-        ) => {
-            console.log(
-                `Transaction executed to: ${to}, data: ${data}, success: ${success}`,
-            )
-            userContract.off("TransactionExecuted", transactionExecutedListener)
-        }
-
-        userContract.on("TransactionExecuted", transactionExecutedListener)
-        userContract.on("SecretRecovered", secretRecoveredListener)
-        userContract.on("LogHash", recoveredHashListener)
-        const recoverAndExecute = await userContract.recoverAndExecute(
-            stringBuyTx,
-            stringSellTx,
-        )
-        await recoverAndExecute.wait()
 
         //userComplain
     } else {
