@@ -39,7 +39,10 @@ const config: HardhatUserConfig = {
         outputFile: "gas-report.txt",
         noColors: true,
         currency: "USD",
-        coinmarketcap: COINMARKETCAP_API_KEY,
+        coinmarketcap: "b8043906-b8af-4099-8d97-81f9c7e69030",
+        token: "ETH",
+        showMethodSig: true,
+        gasPrice: 21,
     },
 }
 

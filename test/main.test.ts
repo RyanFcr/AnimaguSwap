@@ -22,10 +22,10 @@ describe("AnimaguSwap", function () {
     let animaguSwap: AnimaguSwap
     let tokenIn: IERC20
     let tokenOut: IERC20
-    const AMOUNT_IN = 100000000
-    const AMOUNT_OUT_MIN = 1
-    const AMOUT_OUT = 1
-    const AMOUNT_IN_MAX = 100000000
+    const AMOUNT_IN: bigint = 100000000n
+    // const AMOUNT_OUT_MIN = 350
+    const AMOUNT_OUT: bigint = 100000000n
+    // const AMOUNT_IN_MAX = 450
     const daiAddress = "0x6B175474E89094C44Da98b954EedeAC495271d0F" // Toekn Out (DAI)
     const wBtcHolderAddreess = "0x1Cb17a66DC606a52785f69F08F4256526aBd4943" //WBTC Whale
     const wBtcAddress = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599" // Token In (WBTC)
@@ -59,8 +59,16 @@ describe("AnimaguSwap", function () {
         const animaguSwapAddress = await animaguSwap.getAddress()
         // Make wBtcHolder the signer
         const signerWBTCHolder = await ethers.getSigner(wBtcHolderAddreess)
-        //console.log('animaguSwapAddress : ',animaguSwapAddress)
-
+        const AMOUNT_OUT_MIN = await animaguSwap.getAmountOutMin(
+            wBtcAddress,
+            daiAddress,
+            AMOUNT_IN,
+        )
+        const AMOUNT_IN_MAX = await animaguSwap.getAmountInMax(
+            daiAddress,
+            wBtcAddress,
+            AMOUNT_OUT,
+        )
         const userWallet = new ethers.Wallet(userPrivateKey, provider)
         await network.provider.request({
             method: "hardhat_setBalance",
@@ -114,7 +122,6 @@ describe("AnimaguSwap", function () {
             await animaguSwap.connect(depositWallet).deposit(depositAmount, {
                 value: depositAmount,
             })
-            console.log(`Deposited for staker ${depositWallet.address}`)
             let balanceAfter = await provider.getBalance(depositWallet.address)
             console.log(
                 `Staker ${i} balance: ${parseFloat(
@@ -124,8 +131,8 @@ describe("AnimaguSwap", function () {
         }
 
         // Stage 1: transaction creation
-        const random: number = 0 //randomBit()
-        const B: number = 1 //randomBit()
+        const random: number = 1 //randomBit()
+        const B: number = 0 //randomBit()
         console.log("Random number:", random)
         console.log("B:", B)
         let buyTx
@@ -141,7 +148,7 @@ describe("AnimaguSwap", function () {
         // path[path.length - 1] = output
         // DAI -> wBTC
         buyTx = await buildBuyTx(
-            AMOUT_OUT,
+            AMOUNT_OUT,
             AMOUNT_IN_MAX,
             wBtcAddress,
             daiAddress,
@@ -169,10 +176,15 @@ describe("AnimaguSwap", function () {
         if (B == 0) txb = tx
         else if (random == 0) txb = sellTx
         else txb = buyTx
-
+        const V = randomBit()
+        const W = randomBit()
+        console.log("W+V:", concatenateNumbers(W, V))
+        const hashedWV = ethers.keccak256(
+            ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
+        )
+        console.log("hashedWV:", hashedWV)
         console.log("txb", txb)
-        const txbAsString = encodeTransactionToHex(txb)
-        const txprime = decodeHexToTransaction(txbAsString)
+        const txbAsString = encodeTransactionToHex(txb, hashedWV)
         const commitment = ethers.solidityPackedKeccak256(
             ["string"],
             [txbAsString],
@@ -180,23 +192,15 @@ describe("AnimaguSwap", function () {
         console.log("to", txb.to?.toString().toLowerCase()!)
         console.log("data", txb.data?.toString().slice(2)!)
         console.log("txbAsString:", txbAsString)
-        console.log("txprime:", txprime)
         console.log("commitment:", commitment) //hex
         // Stage2: transaction submission
-        // Call commit
+
         const commitTx = await animaguSwap
             .connect(signerWBTCHolder)
-            .commit(commitment)
+            .commit(commitment, hashedWV)
         await commitTx.wait()
         console.log("Commit transaction sent and mined.")
 
-        const V = randomBit()
-
-        const W = randomBit()
-        console.log("W+V:", concatenateNumbers(W, V))
-        const hashedWV = ethers.keccak256(
-            ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
-        )
         const message = concatenateNumbers(B, V) // Concatenation of B and V
 
         const keyPair = curve.keyFromPrivate(flipperPrivateKey.slice(2), "hex") // Remove the "0x" prefix
@@ -227,9 +231,7 @@ describe("AnimaguSwap", function () {
         if (verifySignatureResult) {
             console.log("Signature verified!")
             const secret = Buffer.from(txbAsString)
-            console.log("secret:", secret)
             const shares = sss.split(secret, { shares: N, threshold: N })
-            console.log("shares:", shares)
 
             const tree = new MerkleTree(shares, keccak256, { sort: true })
             const root = "0x" + tree.getRoot().toString("hex")
@@ -242,7 +244,6 @@ describe("AnimaguSwap", function () {
                     proof: proof,
                 }
             })
-            console.log(stakerData)
             // Sign each 'share' and 'proof' with user's signature and verify to prevent malicious behavior by the user
             const stakerDataWithSignatures = []
             for (const data of stakerData) {
@@ -301,44 +302,19 @@ describe("AnimaguSwap", function () {
             // Stage 3: Transaction Inclusion
             const recoveredTx = sss.combine(shares.slice(0, 2))
             const recoveredTxString = recoveredTx.toString()
-            console.log("recovered:", recoveredTx)
-            console.log("recovered:", recoveredTxString)
             const recoveredTxHash = ethers.solidityPackedKeccak256(
                 ["string"],
                 [recoveredTxString],
             )
-            const decodedRecoveredTx = decodeHexToTransaction(recoveredTxString)
+            const { tx: decodedRecoveredTx, mdHash: recoveredMdHash } =
+                decodeHexToTransaction(recoveredTxString)
             const { functionName, parameters } = decodeData(decodedRecoveredTx)
-            console.log("to:", decodedRecoveredTx.to)
-            console.log("data:", decodedRecoveredTx.data)
-            console.log("functionName:", functionName)
-            console.log("parameters:", parameters)
-            console.log("Type:", typeof parameters)
-            // parameters as object
-            const clonedParameters = [...parameters]
-            console.log(clonedParameters.length)
-            console.log("clonedParameters", clonedParameters)
-            console.log("Type", typeof clonedParameters)
-            console.log(clonedParameters.at(0))
-            console.log("Type", typeof clonedParameters.at(0))
-            console.log(clonedParameters.at(1))
-            console.log("Type", typeof clonedParameters.at(1))
-            console.log(clonedParameters.at(2))
-            console.log("Type", typeof clonedParameters.at(2))
-            console.log(clonedParameters.at(2).at(0))
-            console.log("Type", typeof clonedParameters.at(2).at(0))
-            console.log(clonedParameters.at(2).at(1))
-            console.log("Type", typeof clonedParameters.at(2).at(1))
-            console.log(clonedParameters.at(3))
-            console.log("Type", typeof clonedParameters.at(3))
-            console.log(clonedParameters.at(4))
-            console.log("Type", typeof clonedParameters.at(4))
             const isExactTokensForTokens =
                 functionName === "swapExactTokensForTokens"
             console.log("isExactTokensForTokens:", isExactTokensForTokens)
             let recoveredPath: string[] = []
-            for (let i = 0; i < clonedParameters[2].length; i++) {
-                recoveredPath[i] = clonedParameters[2][i]
+            for (let i = 0; i < parameters[2].length; i++) {
+                recoveredPath[i] = parameters[2][i]
             }
 
             let flipperB = decryptedMessage[0]
@@ -366,25 +342,25 @@ describe("AnimaguSwap", function () {
             )
             console.log("wBTC Balance before: ", wBtcBalanceBefore)
             console.log("DAI Balance before: ", DAIBalanceBefore)
-            await tokenIn
-                .connect(signerWBTCHolder)
-                .approve(animaguSwapAddress, wBtcBalanceBefore)
-            const allowance = await tokenIn.allowance(
-                wBtcHolderAddreess,
-                animaguSwapAddress,
+            const recoveredSignerWBTCHolder = await ethers.getSigner(
+                String(parameters.at(3)),
             )
-            // Test approve() works as expected
-            expect(allowance).to.equal(wBtcBalanceBefore)
 
+            await tokenIn
+                .connect(recoveredSignerWBTCHolder)
+                .approve(animaguSwapAddress, wBtcBalanceBefore)
+            await tokenOut
+                .connect(recoveredSignerWBTCHolder)
+                .approve(animaguSwapAddress, DAIBalanceBefore)
             await animaguSwap
                 .connect(leaderStakerWallet)
                 .commitAndExecute(
                     recoveredTxHash,
                     isExactTokensForTokens,
                     recoveredPath,
-                    clonedParameters.at(0),
-                    clonedParameters.at(1),
-                    clonedParameters.at(3),
+                    parameters.at(0),
+                    parameters.at(1),
+                    parameters.at(3),
                 )
             const wBtcBalanceAfter = await tokenIn.balanceOf(TO)
             console.log(
@@ -392,8 +368,56 @@ describe("AnimaguSwap", function () {
             )
             console.log("wBTC Balance after: ", wBtcBalanceAfter)
 
-            const balanceAfter = await tokenOut.balanceOf(TO)
-            console.log("DAI Balance After : ", balanceAfter)
+            const DAIBalanceAfter = await tokenOut.balanceOf(TO)
+            console.log("DAI Balance After : ", DAIBalanceAfter)
+            //Tf
+            if (random == 1) {
+                console.log(
+                    DAIBalanceAfter - DAIBalanceBefore - parameters.at(1),
+                )
+                if (
+                    DAIBalanceAfter - DAIBalanceBefore - parameters.at(1) !=
+                    BigInt(0)
+                ) {
+                    animaguSwap
+                        .connect(recoveredSignerWBTCHolder)
+                        .transferTokenToAddress(
+                            daiAddress,
+                            flipperWallet.address,
+                            DAIBalanceAfter -
+                                DAIBalanceBefore -
+                                parameters.at(1),
+                        )
+                }
+            } else {
+                console.log(
+                    wBtcBalanceAfter - wBtcBalanceBefore - parameters.at(1),
+                )
+                if (
+                    wBtcBalanceAfter - wBtcBalanceBefore - parameters.at(1) !=
+                    BigInt(0)
+                ) {
+                    animaguSwap
+                        .connect(recoveredSignerWBTCHolder)
+                        .transferTokenToAddress(
+                            wBtcAddress,
+                            flipperWallet.address,
+                            wBtcBalanceAfter -
+                                wBtcBalanceBefore -
+                                parameters.at(1),
+                        )
+                }
+            }
+
+            // console.log("signedCommitment:", signedCommitment)
+            // await animaguSwap
+            //     .connect(recoveredSignerWBTCHolder)
+            //     .userComplain(
+            //         flipperWallet.address,
+            //         signedCommitment,
+            //         V.toString(),
+            //         W.toString(),
+            //     )
         } else {
             console.log("Signature verification failed!")
         }

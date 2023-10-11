@@ -6,21 +6,18 @@ const IUniswapV2Router02ABI = new Interface(IUniswapV2Router02.abi)
 const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
 export function buildBuyTx(
-    amountOut: number,
-    amountInMax: number,
+    amountOut: bigint,
+    amountInMax: bigint,
     tokenA: string,
     tokenB: string,
     to: string,
     deadline: number,
 ): ethers.TransactionRequest {
-    let path: string[]
+    let path: string[] = []
     if (tokenA == WETH || tokenB == WETH) {
         path = [tokenB, tokenA]
     } else {
         path = [tokenB, WETH, tokenA]
-        console.log(path[0])
-        console.log(path[1])
-        console.log(path[2])
     }
 
     return {
@@ -33,14 +30,14 @@ export function buildBuyTx(
 }
 
 export function buildSellTx(
-    amountIn: number,
-    amountOutMin: number,
+    amountIn: bigint,
+    amountOutMin: bigint,
     tokenA: string,
     tokenB: string,
     to: string,
     deadline: number,
 ): ethers.TransactionRequest {
-    let path: string[]
+    let path: string[] = []
     if (tokenA == WETH || tokenB == WETH) {
         path = [tokenA, tokenB]
     } else {
@@ -55,24 +52,29 @@ export function buildSellTx(
     }
 }
 // 编码 TransactionRequest 为十六进制
-export function encodeTransactionToHex(tx: ethers.TransactionRequest): string {
-    return tx.to?.toString()! + tx.data?.toString()!.slice(2)
+export function encodeTransactionToHex(
+    tx: ethers.TransactionRequest,
+    mdHash: string,
+): string {
+    return tx.to?.toString()! + tx.data?.toString()!.slice(2) + mdHash.slice(2)
 }
 
-// 从十六进制解码到 TransactionRequest
-export function decodeHexToTransaction(
-    hexString: string,
-): ethers.TransactionRequest {
-    let to = "0x" + hexString.substring(2, 42) // 地址长度为 42 个字符 (包括 "0x" 前缀)
-    let data = "0x" + hexString.substring(42)
+export function decodeHexToTransaction(hexString: string): {
+    tx: ethers.TransactionRequest
+    mdHash: string
+} {
+    // 地址长度为 42 个字符 (包括 "0x" 前缀)
+    let to = hexString.substring(0, 42)
+    // 因为我们知道mdHash是64个字符，所以可以直接从hexString的末尾切割
+    let data = "0x" + hexString.substring(42, hexString.length - 64)
+    let mdHash = "0x" + hexString.substring(hexString.length - 64)
 
-    // 从十六进制字符串创建 TransactionRequest 对象
     let tx: ethers.TransactionRequest = {
         to: to,
         data: data,
     }
 
-    return tx
+    return { tx, mdHash }
 }
 
 // 使用 Uniswap 的 ABI 来解码 data

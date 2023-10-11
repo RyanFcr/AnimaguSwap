@@ -31,8 +31,7 @@
     "typescript": "^5.2.2"
   },
   "scripts": {
-    "deploy": "yarn hardhat run  scripts/deployAnimaguSwap.ts --network sepolia",
-    "main": "yarn hardhat run scripts/main.ts --network sepolia"
+    "deploy": "yarn hardhat run  scripts/deployAnimaguSwap.ts --network sepolia"
   },
   "dependencies": {
     "@openzeppelin/contracts": "4.9.2",
