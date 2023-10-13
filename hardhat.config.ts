@@ -18,7 +18,21 @@ let ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || ""
 
 const config: HardhatUserConfig = {
     defaultNetwork: "hardhat",
-    solidity: "0.8.20",
+    solidity: {
+        version: "0.8.20",
+        settings: {
+            optimizer: {
+                enabled: true,
+                runs: 400,
+            },
+            outputSelection: {
+                "*": {
+                    "*": ["*"],
+                },
+            },
+            viaIR: true, // 这里启用viaIR
+        },
+    },
     networks: {
         hardhat: {
             forking: {

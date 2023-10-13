@@ -18,7 +18,7 @@ contract AnimaguSwap {
     mapping(address => DepositorInfo) private _deposits;
 
     // Records the commit hash for each participant
-    bytes32[] public commitWV;
+    string[] public commitWV;
     uint8[] public revealedB;
     uint8 public nowRevealedB;
 
@@ -59,14 +59,185 @@ contract AnimaguSwap {
         return true;
     }
 
+    function extractSubstring(
+        bytes memory strBytes,
+        uint startIdx,
+        uint endIdx
+    ) internal pure returns (string memory) {
+        bytes memory result = new bytes(endIdx - startIdx + 1);
+
+        for (uint i = 0; i <= endIdx - startIdx; i++) {
+            result[i] = strBytes[startIdx + i];
+        }
+
+        return string(result);
+    }
+
+    function stringToAddress(
+        string memory _address
+    ) public pure returns (address) {
+        string memory cleanAddress = remove0xPrefix(_address);
+        bytes20 _addressBytes = parseHexStringToBytes20(cleanAddress);
+        return address(_addressBytes);
+    }
+
+    function remove0xPrefix(
+        string memory _hexString
+    ) internal pure returns (string memory) {
+        if (
+            bytes(_hexString).length >= 2 &&
+            bytes(_hexString)[0] == "0" &&
+            (bytes(_hexString)[1] == "x" || bytes(_hexString)[1] == "X")
+        ) {
+            return substring(_hexString, 2, bytes(_hexString).length);
+        }
+        return _hexString;
+    }
+
+    function substring(
+        string memory _str,
+        uint256 _start,
+        uint256 _end
+    ) internal pure returns (string memory) {
+        bytes memory _strBytes = bytes(_str);
+        bytes memory _result = new bytes(_end - _start);
+        for (uint256 i = _start; i < _end; i++) {
+            _result[i - _start] = _strBytes[i];
+        }
+        return string(_result);
+    }
+
+    function parseHexStringToBytes20(
+        string memory _hexString
+    ) internal pure returns (bytes20) {
+        bytes memory _bytesString = bytes(_hexString);
+        uint160 _parsedBytes = 0;
+        for (uint256 i = 0; i < _bytesString.length; i += 2) {
+            _parsedBytes *= 256;
+            uint8 _byteValue = parseByteToUint8(_bytesString[i]);
+            _byteValue *= 16;
+            _byteValue += parseByteToUint8(_bytesString[i + 1]);
+            _parsedBytes += _byteValue;
+        }
+        return bytes20(_parsedBytes);
+    }
+
+    function parseByteToUint8(bytes1 _byte) internal pure returns (uint8) {
+        if (uint8(_byte) >= 48 && uint8(_byte) <= 57) {
+            return uint8(_byte) - 48;
+        } else if (uint8(_byte) >= 65 && uint8(_byte) <= 70) {
+            return uint8(_byte) - 55;
+        } else if (uint8(_byte) >= 97 && uint8(_byte) <= 102) {
+            return uint8(_byte) - 87;
+        } else {
+            revert(string(abi.encodePacked("Invalid byte value: ", _byte)));
+        }
+    }
+
+    function parseTransaction(
+        string memory transaction
+    ) internal pure returns (string[] memory) {
+        bytes memory _inputBytes = bytes(transaction);
+        uint count = 1; // at least 1 string even if no commas
+        for (uint i = 0; i < _inputBytes.length; i++) {
+            if (_inputBytes[i] == ",") {
+                count++;
+            }
+        }
+
+        string[] memory parts = new string[](count);
+        uint j = 0; // part index
+        uint start = 0;
+        for (uint i = 0; i < _inputBytes.length; i++) {
+            if (_inputBytes[i] == ",") {
+                parts[j++] = extractSubstring(_inputBytes, start, i - 1);
+                start = i + 1;
+            }
+        }
+        parts[j] = extractSubstring(_inputBytes, start, _inputBytes.length - 1);
+        return parts;
+    }
+
+    // 提取路径创建逻辑
+    function createPath(
+        address token1,
+        address token2,
+        address _WETH,
+        bool isExact
+    ) internal pure returns (address[] memory) {
+        address[] memory path = new address[](3); // 最大长度为3
+        if (isExact == true) {
+            if (
+                keccak256(abi.encodePacked(token1)) ==
+                keccak256(abi.encodePacked(_WETH)) ||
+                keccak256(abi.encodePacked(token2)) ==
+                keccak256(abi.encodePacked(_WETH))
+            ) {
+                path[0] = token1;
+                path[1] = token2;
+                return path;
+            } else {
+                path[0] = token1;
+                path[1] = _WETH;
+                path[2] = token2;
+                return path;
+            }
+        } else {
+            if (
+                keccak256(abi.encodePacked(token1)) ==
+                keccak256(abi.encodePacked(_WETH)) ||
+                keccak256(abi.encodePacked(token2)) ==
+                keccak256(abi.encodePacked(_WETH))
+            ) {
+                path[0] = token2;
+                path[1] = token1;
+                return path;
+            } else {
+                path[0] = token2;
+                path[1] = _WETH;
+                path[2] = token1;
+                return path;
+            }
+        }
+    }
+
+    function stringToUint(string memory s) internal pure returns (uint) {
+        bytes memory b = bytes(s);
+        uint result = 0;
+        for (uint256 i = 0; i < b.length; i++) {
+            uint256 c = uint256(uint8(b[i]));
+            if (c >= 48 && c <= 57) {
+                result = result * 10 + (c - 48);
+            }
+        }
+        return result;
+    }
+
     function commitAndExecute(
-        bytes32 newCommitment,
-        bool isExactTokensForTokens,
-        address[] memory path,
-        uint amountA,
-        uint amountB,
-        address to
+        string memory transaction
     ) external returns (bool) {
+        string[] memory parts = parseTransaction(transaction);
+
+        string memory functionName = parts[0];
+        uint amountA = stringToUint(parts[1]);
+        uint amountB = stringToUint(parts[2]);
+        address token1 = stringToAddress(parts[3]);
+        address token2 = stringToAddress(parts[4]);
+        address to = stringToAddress(parts[5]);
+        uint deadline = stringToUint(parts[6]);
+        string memory mdHash = parts[7];
+        commitWV.push(mdHash);
+
+        bool isExactTokensForTokens = keccak256(
+            abi.encodePacked(functionName)
+        ) == keccak256(abi.encodePacked("swapExactTokensForTokens"));
+        address[] memory path = createPath(
+            token1,
+            token2,
+            WETH,
+            isExactTokensForTokens
+        );
+        bytes32 newCommitment = keccak256(abi.encodePacked(transaction));
         bytes32 _commitment = commitments[0];
         require(newCommitment == _commitment, "The commitments do not match.");
         commitments.pop();
@@ -96,7 +267,7 @@ contract AnimaguSwap {
                     amountB,
                     path,
                     to,
-                    block.timestamp
+                    deadline
                 );
             } else {
                 //buy
@@ -114,7 +285,7 @@ contract AnimaguSwap {
                     amountB,
                     path,
                     to,
-                    block.timestamp
+                    deadline
                 );
             }
         } else {
@@ -123,7 +294,6 @@ contract AnimaguSwap {
             flipperPath = new address[](path.length);
             for (uint i = 0; i < path.length; i++) {
                 flipperPath[i] = path[path.length - 1 - i];
-                console.log("flipperPath: ", flipperPath[i]);
             }
             if (isExactTokensForTokens == true) {
                 //sell->buy
@@ -146,7 +316,7 @@ contract AnimaguSwap {
                     _amountB,
                     flipperPath,
                     to,
-                    block.timestamp
+                    deadline
                 );
             } else {
                 //buy->sell
@@ -169,7 +339,7 @@ contract AnimaguSwap {
                     _amountB,
                     flipperPath,
                     to,
-                    block.timestamp
+                    deadline
                 );
             }
         }
@@ -263,9 +433,13 @@ contract AnimaguSwap {
         // console.log("computedWV", computedWV);
         // console.log("_commitWV", _commitWV);
         console.log("1");
-        bytes32 _commitWV = commitWV[0];
+        string memory _commitWV = commitWV[0];
         commitWV.pop();
-        require(computedWV == _commitWV, "W+V hash does not match");
+        require(
+            keccak256(abi.encodePacked(computedWV)) ==
+                keccak256(abi.encodePacked(_commitWV)),
+            "W+V hash does not match"
+        );
         console.log("1");
         // Verify revealedB + V hash
         string memory concatenatedBV = string(abi.encodePacked(revealedB, V)); // Here, you might need to check the type of revealedB and ensure its value is 0 or 1.
@@ -313,88 +487,3 @@ contract AnimaguSwap {
         }
     }
 }
-
-// // 辅助函数，确保hex字符串有预期的长度
-// function _padToLength(
-//     string memory _str,
-//     uint _length
-// ) internal pure returns (string memory) {
-//     string memory padded = _str;
-//     while (bytes(padded).length < _length) {
-//         padded = string(abi.encodePacked("0", padded));
-//     }
-//     return padded;
-// }
-
-// Convert uint to hex string
-// function _toHexString(
-//     uint256 value,
-//     uint length
-// ) internal pure returns (string memory) {
-//     bytes32 _bytes = bytes32(value);
-//     // console.log("_bytes", _bytes));
-//     bytes memory byteArray = new bytes(length);
-//     for (uint256 i = 0; i < length; i++) {
-//         console.log("i", length - 1 - i);
-//         byteArray[i] = _bytes[length - 1 - i];
-//     }
-//     return string(byteArray);
-// }
-
-// function _combineParametersToHexString(
-//     address _to,
-//     uint amountA,
-//     uint amountB,
-//     address[] memory path,
-//     address to,
-//     string memory deadline,
-//     bytes32 mdHash
-// ) internal view returns (string memory) {
-//     // Convert address _to to 40-char length hex string without '0x'
-//     string memory _toStr = _toHexString(uint160(_to), 20);
-//     console.log("_toStr", _toStr);
-
-//     // Convert amountA and amountB to 64-char length hex string
-//     string memory amountAStr = _toHexString(amountA, 32);
-//     string memory amountBStr = _toHexString(amountB, 32);
-//     console.log("amountAStr", amountAStr);
-//     console.log("amountBStr", amountBStr);
-
-//     // Convert path addresses to 40-char length hex strings
-//     string memory pathStr = "";
-//     for (uint i = 0; i < path.length; i++) {
-//         pathStr = string(
-//             abi.encodePacked(pathStr, _toHexString(uint160(path[i]), 20))
-//         );
-//     }
-//     console.log("pathStr", pathStr);
-
-//     // Convert address to to 40-char length hex string without '0x'
-//     string memory toStr = _toHexString(uint160(to), 20);
-//     console.log("toStr", toStr);
-
-//     // Convert deadline to 64-char length hex string
-//     string memory deadlineStr = string(abi.encodePacked(deadline));
-//     console.log("deadlineStr", deadlineStr);
-
-//     // mdHash is already a 64-char length hex string
-//     string memory mdHashStr = string(abi.encodePacked(mdHash));
-//     console.log("mdHashStr", mdHashStr);
-
-//     // Concatenate all together
-//     string memory combined = string(
-//         abi.encodePacked(
-//             "0x",
-//             // _toStr,
-//             amountAStr,
-//             amountBStr,
-//             pathStr,
-//             toStr,
-//             deadlineStr,
-//             mdHashStr
-//         )
-//     );
-//     console.log("combined", combined);
-
-//     return combined;
-// }

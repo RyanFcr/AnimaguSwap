@@ -3,13 +3,7 @@ import { ethers, network } from "hardhat"
 import { IERC20, AnimaguSwap, AnimaguSwap__factory } from "../typechain-types"
 import { randomBit } from "../scripts/randomUtils"
 import { concatenateNumbers } from "../scripts/concatenateUtils"
-import {
-    buildBuyTx,
-    buildSellTx,
-    encodeTransactionToHex,
-    decodeHexToTransaction,
-    decodeData,
-} from "../scripts/uniswapAction"
+import { buildBuyTx, buildSellTx } from "../scripts/uniswapAction"
 import sss from "shamirs-secret-sharing"
 import { MerkleTree } from "merkletreejs"
 import { keccak256 } from "js-sha3"
@@ -140,7 +134,13 @@ describe("AnimaguSwap", function () {
         let tx
         let txb
         const deadline = Math.floor(Date.now() / 1000) + 60 * 10
-
+        const V = randomBit()
+        const W = randomBit()
+        console.log("W+V:", concatenateNumbers(W, V))
+        const hashedWV = ethers.keccak256(
+            ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
+        )
+        console.log("hashedWV:", hashedWV)
         // buy = swapTokensForExactTokens
         // Receive an exact amount of output tokens for as few input tokens as possible
         // AMOUT_OUT is exact amount
@@ -154,6 +154,7 @@ describe("AnimaguSwap", function () {
             daiAddress,
             TO,
             deadline,
+            hashedWV,
         )
         // sell = swapExactTokensForTokens
         // Swaps an exact amount of input tokens for as many output tokens as possible
@@ -168,30 +169,27 @@ describe("AnimaguSwap", function () {
             daiAddress,
             TO,
             deadline,
+            hashedWV,
         )
+        let idealAmount: bigint
 
         if (random == 0) tx = buyTx
         else tx = sellTx
 
-        if (B == 0) txb = tx
-        else if (random == 0) txb = sellTx
-        else txb = buyTx
-        const V = randomBit()
-        const W = randomBit()
-        console.log("W+V:", concatenateNumbers(W, V))
-        const hashedWV = ethers.keccak256(
-            ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
-        )
-        console.log("hashedWV:", hashedWV)
+        if (B == 0) {
+            txb = tx
+            if (random == 0) idealAmount = AMOUNT_IN_MAX
+            else idealAmount = AMOUNT_OUT_MIN
+        } else if (random == 0) {
+            txb = sellTx
+            idealAmount = AMOUNT_OUT_MIN
+        } else {
+            txb = buyTx
+            idealAmount = AMOUNT_IN_MAX
+        }
+
         console.log("txb", txb)
-        const txbAsString = encodeTransactionToHex(txb, hashedWV)
-        const commitment = ethers.solidityPackedKeccak256(
-            ["string"],
-            [txbAsString],
-        )
-        console.log("to", txb.to?.toString().toLowerCase()!)
-        console.log("data", txb.data?.toString().slice(2)!)
-        console.log("txbAsString:", txbAsString)
+        const commitment = ethers.solidityPackedKeccak256(["string"], [txb])
         console.log("commitment:", commitment) //hex
         // Stage2: transaction submission
 
@@ -230,9 +228,9 @@ describe("AnimaguSwap", function () {
         )
         if (verifySignatureResult) {
             console.log("Signature verified!")
-            const secret = Buffer.from(txbAsString)
+            const secret = Buffer.from(txb)
             const shares = sss.split(secret, { shares: N, threshold: N })
-
+            console.log("shares:", shares)
             const tree = new MerkleTree(shares, keccak256, { sort: true })
             const root = "0x" + tree.getRoot().toString("hex")
             // Create an array for each staker, containing their share and its corresponding Merkle proof
@@ -302,21 +300,8 @@ describe("AnimaguSwap", function () {
             // Stage 3: Transaction Inclusion
             const recoveredTx = sss.combine(shares.slice(0, 2))
             const recoveredTxString = recoveredTx.toString()
-            const recoveredTxHash = ethers.solidityPackedKeccak256(
-                ["string"],
-                [recoveredTxString],
-            )
-            const { tx: decodedRecoveredTx, mdHash: recoveredMdHash } =
-                decodeHexToTransaction(recoveredTxString)
-            console.log("recoveredMdHash", recoveredMdHash)
-            const { functionName, parameters } = decodeData(decodedRecoveredTx)
-            const isExactTokensForTokens =
-                functionName === "swapExactTokensForTokens"
-            console.log("isExactTokensForTokens:", isExactTokensForTokens)
-            let recoveredPath: string[] = []
-            for (let i = 0; i < parameters[2].length; i++) {
-                recoveredPath[i] = parameters[2][i]
-            }
+            console.log("recoveredTx", recoveredTx)
+            console.log("recoveredTxString", recoveredTxString)
 
             let flipperB = decryptedMessage[0]
             try {
@@ -343,9 +328,7 @@ describe("AnimaguSwap", function () {
             )
             console.log("wBTC Balance before: ", wBtcBalanceBefore)
             console.log("DAI Balance before: ", DAIBalanceBefore)
-            const recoveredSignerWBTCHolder = await ethers.getSigner(
-                String(parameters.at(3)),
-            )
+            const recoveredSignerWBTCHolder = await ethers.getSigner(String(TO))
 
             await tokenIn
                 .connect(recoveredSignerWBTCHolder)
@@ -355,14 +338,7 @@ describe("AnimaguSwap", function () {
                 .approve(animaguSwapAddress, DAIBalanceBefore)
             await animaguSwap
                 .connect(leaderStakerWallet)
-                .commitAndExecute(
-                    recoveredTxHash,
-                    isExactTokensForTokens,
-                    recoveredPath,
-                    parameters.at(0),
-                    parameters.at(1),
-                    parameters.at(3),
-                )
+                .commitAndExecute(recoveredTxString)
             const wBtcBalanceAfter = await tokenIn.balanceOf(TO)
             console.log(
                 "----------------------------------------------------------------",
@@ -372,12 +348,11 @@ describe("AnimaguSwap", function () {
             const DAIBalanceAfter = await tokenOut.balanceOf(TO)
             console.log("DAI Balance After : ", DAIBalanceAfter)
             //Tf
+
             if (random == 1) {
-                console.log(
-                    DAIBalanceAfter - DAIBalanceBefore - parameters.at(1),
-                )
+                console.log(DAIBalanceAfter - DAIBalanceBefore - idealAmount)
                 if (
-                    DAIBalanceAfter - DAIBalanceBefore - parameters.at(1) !=
+                    DAIBalanceAfter - DAIBalanceBefore - idealAmount !=
                     BigInt(0)
                 ) {
                     animaguSwap
@@ -385,17 +360,13 @@ describe("AnimaguSwap", function () {
                         .transferTokenToAddress(
                             daiAddress,
                             flipperWallet.address,
-                            DAIBalanceAfter -
-                                DAIBalanceBefore -
-                                parameters.at(1),
+                            DAIBalanceAfter - DAIBalanceBefore - idealAmount,
                         )
                 }
             } else {
-                console.log(
-                    wBtcBalanceAfter - wBtcBalanceBefore - parameters.at(1),
-                )
+                console.log(wBtcBalanceAfter - wBtcBalanceBefore - idealAmount)
                 if (
-                    wBtcBalanceAfter - wBtcBalanceBefore - parameters.at(1) !=
+                    wBtcBalanceAfter - wBtcBalanceBefore - idealAmount !=
                     BigInt(0)
                 ) {
                     animaguSwap
@@ -403,13 +374,12 @@ describe("AnimaguSwap", function () {
                         .transferTokenToAddress(
                             wBtcAddress,
                             flipperWallet.address,
-                            wBtcBalanceAfter -
-                                wBtcBalanceBefore -
-                                parameters.at(1),
+                            wBtcBalanceAfter - wBtcBalanceBefore - idealAmount,
                         )
                 }
             }
 
+            // userComplain
             // console.log("signedCommitment:", signedCommitment)
             // await animaguSwap
             //     .connect(recoveredSignerWBTCHolder)
