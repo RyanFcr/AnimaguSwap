@@ -27,7 +27,7 @@ describe("AnimaguSwap", function () {
 
     // Initialization
     const stakers: any[] = []
-    const N = 2 // N is the number of stakers
+    const N = 10 // N is the number of stakers
     const provider = ethers.provider.provider
     const flipperPrivateKey = process.env[`PRIVATE_KEY_${0}`]
     if (!flipperPrivateKey) {
@@ -350,6 +350,7 @@ describe("AnimaguSwap", function () {
             //Tf
 
             if (random == 1) {
+                console.log(idealAmount)
                 console.log(DAIBalanceAfter - DAIBalanceBefore - idealAmount)
                 if (
                     DAIBalanceAfter - DAIBalanceBefore - idealAmount !=

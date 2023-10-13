@@ -30,11 +30,11 @@
 - 「Off Chain」V = randomBit(): The design of V is to prevent flipper cheats, ensuring that the flipper cannot send an identical signed message to the stakers.
 - 「Off Chain」md.hash = hash(W|V)
 - 「Off Chain」md.hash is a part of the transaction, owned by the User to slash flipper
-- 「Off Chain」Convert the transaction information into a String(md.hash is not included), to be used for subsequent secret sharing.
+- 「Off Chain」Convert the transaction information into a String(md.hash is also included), to be used for subsequent secret sharing.
 
 **Transaction submission:**
 
-- 「On Chain」User submit commitment= hash(Tx') and md.hash on chain
+- 「On Chain」User submit commitment= hash(Tx') on chain
   - Commitments of these orders are put in an on-chain queue 
 - 「Off Chain」User to F：The user concatenates B and V and then encrypts them using F's public key before sending to Flipper.
 - 「Off Chain」F to User：F decrypts using its private key. Subsequently, the Flipper signs and sends it to the user. The user receives a signed commitment, OutU, which signifies the flipper's promise to reveal b later.
@@ -46,8 +46,7 @@
 
 - 「Off Chain」Stakers reconstruct Tx' off-chain
 - 「On Chain」Then one of the stakers submits args of message call from reconstructTx' .
-  - If same, proceed to next step, for each element in the FIFO queue, the smart contract does the following: wait for stakers to reconstruct TX, wait for flipper to reveal b(Smart contracts cannot wait, smart contracts cannot be asynchronous. I simulated asynchronous behavior through my frontend script). Once it has both, contract receives args of message call from reconstructTx' and verifies that the args are from the reconstructTx’ and computes the hash(reconstructTx’)==the hash in the commitments queue. And then it will make a message call to the Uniswap for execution, forwarding the "real" transaction.
-    - Return deposits of all stakers
+  - If same, proceed to next step, for each element in the FIFO queue, the smart contract does the following: wait for stakers to reconstruct TX, wait for flipper to reveal b(Smart contracts cannot wait, smart contracts cannot be asynchronous. I simulated asynchronous behavior through my frontend script). Once it has both, contract gets args of message call from reconstructTx' and verifies that the args are from the reconstructTx’ and computes the hash(reconstructTx’)==the hash in the commitments queue. And then it will make a message call to the Uniswap for execution, forwarding the "real" transaction.
   - If not same, a warning
   - The leader would be charged some amount, but would be refunded the amount by some fee mechanism
 
@@ -67,8 +66,8 @@
 
 - Forking ETH Mainnet
 - wBTC->DAI
-- AmountIn = 100000000n; AmountOutMin = 26702388952633220168196n
-  - swap 100000000n wBTC to 26702388952633220168196n DAI
+- AmountIn = 100000000n; AmountOutMin = 26283178705806160790323n
+  - swap 100000000n wBTC to 26283178705806160790323n DAI
 - Staker Number: 2
 - Secret sharing  threshold: 2
 
