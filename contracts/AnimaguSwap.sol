@@ -10,14 +10,18 @@ contract AnimaguSwap {
         0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
-    mapping(address => uint256) public deposits;
-    address[] public depositors;
+    struct DepositorInfo {
+        uint256 amount;
+        bool exists;
+    }
+
+    mapping(address => DepositorInfo) private _deposits;
 
     // Records the commit hash for each participant
-    bytes32 public _commitWV;
+    bytes32[] public commitWV;
+    uint8[] public revealedB;
+    uint8 public nowRevealedB;
 
-    uint8 public revealedB; // New state variable to store the value of b
-    bool public revealedBSet = false;
     // Commitment queue to control transaction order
     bytes32[] public commitments;
 
@@ -26,32 +30,33 @@ contract AnimaguSwap {
     function deposit(uint256 _amount) external payable returns (bool) {
         require(_amount > 0, "Invalid deposit amount");
         require(msg.value == _amount, "Sent value doesn't match the deposit");
-        if (deposits[msg.sender] == 0) {
-            depositors.push(msg.sender);
+
+        DepositorInfo storage depositor = _deposits[msg.sender];
+        if (!depositor.exists) {
+            depositor.exists = true;
         }
-        deposits[msg.sender] += _amount;
+        depositor.amount += _amount;
+
         return true;
     }
 
-    function commit(
-        bytes32 commitment,
-        bytes32 hashedWV
-    ) external returns (bool) {
+    function refundMyDeposit() public {
+        DepositorInfo storage depositor = _deposits[msg.sender];
+        require(
+            depositor.exists && depositor.amount > 0,
+            "No deposit to refund"
+        );
+
+        uint256 amount = depositor.amount;
+        depositor.amount = 0; // Reset the deposit amount
+        depositor.exists = false; // Reset the existence flag
+
+        payable(msg.sender).transfer(amount);
+    }
+
+    function commit(bytes32 commitment) external returns (bool) {
         commitments.push(commitment);
-        _commitWV = hashedWV;
         return true;
-    }
-
-    function refundAllDeposits() internal {
-        for (uint i = 0; i < depositors.length; i++) {
-            address payable depositor = payable(depositors[i]);
-            uint256 amount = deposits[depositor];
-
-            if (amount > 0) {
-                deposits[depositor] = 0; // Reset the deposit amount
-                depositor.transfer(amount); // Refund the deposit
-            }
-        }
     }
 
     function commitAndExecute(
@@ -62,17 +67,19 @@ contract AnimaguSwap {
         uint amountB,
         address to
     ) external returns (bool) {
-        require(
-            revealedBSet,
-            "revealedB must be set before executing this function"
-        );
         bytes32 _commitment = commitments[0];
         require(newCommitment == _commitment, "The commitments do not match.");
         commitments.pop();
-        refundAllDeposits();
+
+        // Only call refundAllDeposits() if the queue is empty
+        // refundAllDeposits();
         // Step 1: Ensure the user has granted enough allowance for the transfer
 
-        if (revealedB == 0) {
+        uint8 _revealedB = revealedB[0];
+        nowRevealedB = _revealedB;
+        revealedB.pop();
+
+        if (_revealedB == 0) {
             if (isExactTokensForTokens == true) {
                 //sell
                 address _tokenIn = path[0];
@@ -221,16 +228,10 @@ contract AnimaguSwap {
     }
 
     function revealFlipper(uint8 _b) external payable returns (bool) {
-        require(
-            deposits[msg.sender] > 0,
-            "Only flipper with deposit can reveal"
-        );
-        require(_b == 0 || _b == 1, "Invalid value for _b"); // 确保_b只能是0或1
+        require(_b == 0 || _b == 1, "Invalid value for _b");
 
-        revealedB = _b; // Store the input b to the state variable
-        revealedBSet = true; // Set the flag to true
-        payable(msg.sender).transfer(deposits[msg.sender]);
-        deposits[msg.sender] = 0;
+        revealedB.push(_b); // Store the input b to the state variable
+
         return true;
     }
 
@@ -246,7 +247,7 @@ contract AnimaguSwap {
         IERC20(tokenAddress).transferFrom(
             msg.sender,
             recipient,
-            revealedB * amount + (1 - revealedB) * amount
+            nowRevealedB * amount + (1 - nowRevealedB) * amount
         );
     }
 
@@ -262,6 +263,8 @@ contract AnimaguSwap {
         // console.log("computedWV", computedWV);
         // console.log("_commitWV", _commitWV);
         console.log("1");
+        bytes32 _commitWV = commitWV[0];
+        commitWV.pop();
         require(computedWV == _commitWV, "W+V hash does not match");
         console.log("1");
         // Verify revealedB + V hash
