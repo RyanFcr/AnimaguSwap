@@ -197,7 +197,7 @@ describe("AnimaguSwap", function () {
 
         const commitTx = await animaguSwap
             .connect(signerWBTCHolder)
-            .commit(commitment, hashedWV)
+            .commit(commitment)
         await commitTx.wait()
         console.log("Commit transaction sent and mined.")
 
@@ -308,6 +308,7 @@ describe("AnimaguSwap", function () {
             )
             const { tx: decodedRecoveredTx, mdHash: recoveredMdHash } =
                 decodeHexToTransaction(recoveredTxString)
+            console.log("recoveredMdHash", recoveredMdHash)
             const { functionName, parameters } = decodeData(decodedRecoveredTx)
             const isExactTokensForTokens =
                 functionName === "swapExactTokensForTokens"
