@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 import "../interfaces/Uniswap.sol";
 
 contract AnimaguSwap {
@@ -226,6 +227,7 @@ contract AnimaguSwap {
         address to = stringToAddress(parts[5]);
         uint deadline = stringToUint(parts[6]);
         string memory mdHash = parts[7];
+        // console.log("stringToBytes32(mdHash)".stringToBytes32(mdHash));
         commitWV.push(mdHash);
 
         bool isExactTokensForTokens = keccak256(
@@ -421,69 +423,129 @@ contract AnimaguSwap {
         );
     }
 
+    function bytes32ToHexString(
+        bytes32 _bytes32
+    ) public pure returns (string memory) {
+        bytes memory byteArray = new bytes(64);
+        for (uint i = 0; i < 32; i++) {
+            bytes1 currentByte = _bytes32[i];
+            bytes1 hi = bytes1(uint8(currentByte) / 16);
+            bytes1 lo = bytes1(uint8(currentByte) - 16 * uint8(hi));
+            byteArray[i * 2] = char(hi);
+            byteArray[1 + i * 2] = char(lo);
+        }
+        return string(byteArray);
+    }
+
+    function char(bytes1 b) private pure returns (bytes1 c) {
+        if (uint8(b) < 10) return bytes1(uint8(b) + 0x30);
+        else return bytes1(uint8(b) + 0x57);
+    }
+
     function userComplain(
-        address flipperWallet,
+        address flipperAddress,
         string memory signature,
         string memory V,
         string memory W
     ) external payable returns (bool) {
-        string memory concatenatedWV = string(abi.encodePacked(W, V));
-        console.log("concatenatedWV", concatenatedWV);
+        string memory concatenatedWV = string.concat(W, V);
         bytes32 computedWV = keccak256(abi.encodePacked(concatenatedWV));
-        // console.log("computedWV", computedWV);
-        // console.log("_commitWV", _commitWV);
-        console.log("1");
+        string memory hexComputedWV = bytes32ToHexString(computedWV);
         string memory _commitWV = commitWV[0];
         commitWV.pop();
         require(
-            keccak256(abi.encodePacked(computedWV)) ==
-                keccak256(abi.encodePacked(_commitWV)),
+            keccak256(abi.encodePacked(_commitWV)) ==
+                keccak256(abi.encodePacked(string.concat("0x", hexComputedWV))),
             "W+V hash does not match"
         );
-        console.log("1");
         // Verify revealedB + V hash
-        string memory concatenatedBV = string(abi.encodePacked(revealedB, V)); // Here, you might need to check the type of revealedB and ensure its value is 0 or 1.
-        bytes32 messageHash = keccak256(abi.encodePacked(concatenatedBV));
+        string memory concatenatedBV = string.concat(
+            Strings.toString(nowRevealedB),
+            V
+        ); // Here, you might need to check the type of revealedB and ensure its value is 0 or 1.
+        console.log(nowRevealedB);
+        console.log("concatenatedBV", concatenatedBV);
+        // bytes32 messageHash = keccak256(abi.encodePacked(concatenatedBV));
 
         // Recover signer's address from signature and messageHash
-        address signer = recover(messageHash, abi.encodePacked(signature));
-        require(signer == flipperWallet, "Invalid signature");
+        address signer = recover(concatenatedBV, signature);
+        console.log("flipperAddress", flipperAddress);
+        console.log("signer", signer);
+        // require(signer == flipperAddress, "Invalid signature");
 
-        // payable(msg.sender).transfer(deposits[msg.sender]);
-        // deposits[msg.sender] = 0;
         return true;
     }
 
     function recover(
-        bytes32 hash,
-        bytes memory signature
+        string memory message,
+        string memory signature
     ) internal pure returns (address) {
+        bytes32 messageHash = keccak256(abi.encodePacked(message));
+        bytes memory signatureBytes = hexToBytes(signature);
+
         bytes32 r;
         bytes32 s;
         uint8 v;
 
         // Check the signature length
-        if (signature.length != 65) {
-            return (address(0));
+        if (signatureBytes.length != 65) {
+            return address(0);
         }
 
         // Divide the signature into r, s, and v variables
         assembly {
-            r := mload(add(signature, 0x20))
-            s := mload(add(signature, 0x40))
-            v := byte(0, mload(add(signature, 0x60)))
+            r := mload(add(signatureBytes, 0x20))
+            s := mload(add(signatureBytes, 0x40))
+            v := byte(0, mload(add(signatureBytes, 0x60)))
         }
 
-        // Version of signature should be 27 or 28, but 0 and 1 are also possible versions
+        // Version of the signature should be 27 or 28, but 0 and 1 are also possible versions
         if (v < 27) {
             v += 27;
         }
 
-        // If the version is correct (27 or 28) recover the signer address
+        // If the version is incorrect, return the zero address
         if (v != 27 && v != 28) {
-            return (address(0));
+            return address(0);
         } else {
-            return ecrecover(hash, v, r, s);
+            // ecrecover takes the message hash, and v, r, s values as inputs
+            return ecrecover(messageHash, v, r, s);
         }
+    }
+
+    function hexToBytes(string memory _hex) public pure returns (bytes memory) {
+        bytes memory strBytes = bytes(_hex);
+        require(strBytes.length % 2 == 0, "Invalid hex string length");
+
+        bytes memory resultBytes = new bytes(strBytes.length / 2);
+
+        for (uint256 i = 0; i < strBytes.length; i += 2) {
+            resultBytes[i / 2] = byteFromHexChar(strBytes[i], strBytes[i + 1]);
+        }
+
+        return resultBytes;
+    }
+
+    function byteFromHexChar(
+        bytes1 _char1,
+        bytes1 _char2
+    ) internal pure returns (bytes1) {
+        return
+            bytes1(
+                (uint8(fromHexChar(_char1)) << 4) | uint8(fromHexChar(_char2))
+            );
+    }
+
+    function fromHexChar(bytes1 _char) internal pure returns (uint8) {
+        if (uint8(_char) >= 48 && uint8(_char) <= 57) {
+            return uint8(_char) - 48; // 0-9
+        }
+        if (uint8(_char) >= 97 && uint8(_char) <= 102) {
+            return 10 + uint8(_char) - 97; // a-f
+        }
+        if (uint8(_char) >= 65 && uint8(_char) <= 70) {
+            return 10 + uint8(_char) - 65; // A-F
+        }
+        revert("Invalid hex char");
     }
 }

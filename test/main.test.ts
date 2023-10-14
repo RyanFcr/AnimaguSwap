@@ -68,8 +68,6 @@ describe("AnimaguSwap", function () {
             method: "hardhat_setBalance",
             params: [userWallet.address, "0x1000000000000000"],
         })
-        const balance = await provider.getBalance(userWallet.address)
-        console.log("User balance:", balance)
         const flipperWallet = new ethers.Wallet(flipperPrivateKey, provider)
         const stakerWallets: any[] = []
         for (let i = 0; i <= N; i++) {
@@ -88,8 +86,6 @@ describe("AnimaguSwap", function () {
                 params: [wallet.address, "0x1000000000000000"],
             })
             // print the balance
-            const balance = await provider.getBalance(wallet.address)
-            console.log("staker " + i + "balance : ", balance)
             if (i > 0) {
                 stakers.push({
                     address: wallet.address,
@@ -107,21 +103,9 @@ describe("AnimaguSwap", function () {
             } else {
                 depositWallet = stakerWallets[i - 1]
             }
-            let balanceBefore = await provider.getBalance(depositWallet.address)
-            console.log(
-                `Staker ${i} balance: ${parseFloat(
-                    ethers.formatEther(balanceBefore),
-                ).toFixed(8)}`,
-            )
             await animaguSwap.connect(depositWallet).deposit(depositAmount, {
                 value: depositAmount,
             })
-            let balanceAfter = await provider.getBalance(depositWallet.address)
-            console.log(
-                `Staker ${i} balance: ${parseFloat(
-                    ethers.formatEther(balanceAfter),
-                ).toFixed(8)}`,
-            )
         }
 
         // Stage 1: transaction creation
@@ -137,9 +121,11 @@ describe("AnimaguSwap", function () {
         const V = randomBit()
         const W = randomBit()
         console.log("W+V:", concatenateNumbers(W, V))
-        const hashedWV = ethers.keccak256(
-            ethers.toUtf8Bytes(concatenateNumbers(W, V).toString()),
+        const hashedWV = ethers.solidityPackedKeccak256(
+            ["string"],
+            [concatenateNumbers(W, V).toString()],
         )
+
         console.log("hashedWV:", hashedWV)
         // buy = swapTokensForExactTokens
         // Receive an exact amount of output tokens for as few input tokens as possible
@@ -229,6 +215,7 @@ describe("AnimaguSwap", function () {
         if (verifySignatureResult) {
             console.log("Signature verified!")
             const secret = Buffer.from(txb)
+            console.log("secret", secret)
             const shares = sss.split(secret, { shares: N, threshold: N })
             console.log("shares:", shares)
             const tree = new MerkleTree(shares, keccak256, { sort: true })
@@ -298,7 +285,7 @@ describe("AnimaguSwap", function () {
                 )
             }
             // Stage 3: Transaction Inclusion
-            const recoveredTx = sss.combine(shares.slice(0, 2))
+            const recoveredTx = sss.combine(shares.slice(0, N))
             const recoveredTxString = recoveredTx.toString()
             console.log("recoveredTx", recoveredTx)
             console.log("recoveredTxString", recoveredTxString)
@@ -381,15 +368,15 @@ describe("AnimaguSwap", function () {
             }
 
             // userComplain
-            // console.log("signedCommitment:", signedCommitment)
-            // await animaguSwap
-            //     .connect(recoveredSignerWBTCHolder)
-            //     .userComplain(
-            //         flipperWallet.address,
-            //         signedCommitment,
-            //         V.toString(),
-            //         W.toString(),
-            //     )
+            console.log("signedCommitment:", signedCommitment)
+            await animaguSwap
+                .connect(recoveredSignerWBTCHolder)
+                .userComplain(
+                    flipperWallet.address,
+                    signedCommitment.slice(2),
+                    V.toString(),
+                    W.toString(),
+                )
         } else {
             console.log("Signature verification failed!")
         }
