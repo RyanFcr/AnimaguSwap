@@ -21,8 +21,8 @@
 - wBTC->DAI
 - AmountIn = 100000000n; AmountOutMin = 26283178705806160790323n
   - swap 100000000n wBTC to 26283178705806160790323n DAI
-- Staker Number: 2
-- Secret sharing  threshold: 2
+- Staker Number: 10
+- Secret sharing  threshold: 10
 
 ![baseline](img/baseline.jpg)
 
