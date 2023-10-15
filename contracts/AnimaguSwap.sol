@@ -6,9 +6,9 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "../interfaces/Uniswap.sol";
 
 contract AnimaguSwap {
-    address private constant UNISWAP_V2_ROUTER =
+    address private immutable UNISWAP_V2_ROUTER =
         0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address private immutable WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
     mapping(address => uint256) private _deposits;
 
@@ -24,16 +24,17 @@ contract AnimaguSwap {
 
     function deposit(uint256 _amount) external payable {
         require(_amount > 0, "Invalid deposit amount");
-        _deposits[msg.sender] += msg.value;
+        if (msg.value > 0) {
+            _deposits[msg.sender] += msg.value;
+        }
     }
 
     function refundDeposit() public {
         uint256 amount = _deposits[msg.sender];
-        require(amount > 0, "No deposit to refund");
-
-        _deposits[msg.sender] = 0;
-
-        payable(msg.sender).transfer(amount);
+        if (amount > 0) {
+            _deposits[msg.sender] = 0;
+            payable(msg.sender).transfer(amount);
+        }
     }
 
     function commit(bytes32 commitment) external {
@@ -118,7 +119,6 @@ contract AnimaguSwap {
             }
         }
 
-        // 捕获最后一个元素
         if (start <= transactionBytes.length) {
             parts[index] = substring(
                 transaction,
@@ -130,7 +130,6 @@ contract AnimaguSwap {
         return parts;
     }
 
-    // 提取路径创建逻辑
     function createPath(
         address token1,
         address token2,
@@ -144,7 +143,6 @@ contract AnimaguSwap {
         bool isToken1WETH = hashToken1 == hashWETH;
         bool isToken2WETH = hashToken2 == hashWETH;
 
-        // 确定路径长度
         uint256 pathLength = isToken1WETH || isToken2WETH ? 2 : 3;
         address[] memory path = new address[](pathLength);
 
@@ -182,9 +180,7 @@ contract AnimaguSwap {
         return result;
     }
 
-    function commitAndExecute(
-        string memory transaction
-    ) external returns (bool) {
+    function commitAndExecute(string memory transaction) external {
         string[] memory parts = parseTransaction(transaction);
 
         string memory functionName = parts[0];
@@ -222,7 +218,7 @@ contract AnimaguSwap {
 
         if (nowRevealedB == 0) {
             address _tokenIn = path[0];
-            uint256 amountToken; // 使用一个变量来处理不同的情况
+            uint256 amountToken;
             if (isExactTokensForTokens) {
                 amountToken = amountA;
             } else {
@@ -306,7 +302,6 @@ contract AnimaguSwap {
 
         (bool success, ) = msg.sender.call{value: address(this).balance}("");
         require(success, "Transfer failed.");
-        return true;
     }
 
     function getAmountOutMin(
@@ -326,7 +321,6 @@ contract AnimaguSwap {
             path[2] = _tokenOut;
         }
 
-        // same length as path
         uint256[] memory amountOutMins = IUniswapV2Router(UNISWAP_V2_ROUTER)
             .getAmountsOut(_amountIn, path);
 
@@ -350,16 +344,14 @@ contract AnimaguSwap {
             path[2] = _tokenOut;
         }
 
-        // same length as path
         uint256[] memory amountInMaxes = IUniswapV2Router(UNISWAP_V2_ROUTER)
             .getAmountsIn(_amountOut, path);
 
         return amountInMaxes[0];
     }
 
-    function revealFlipper(uint8 _b) external payable returns (bool) {
-        revealedB.push(_b); // Store the input b to the state variable
-        return true;
+    function revealFlipper(uint8 _b) external payable {
+        revealedB.push(_b);
     }
 
     function transactionF(
@@ -370,7 +362,6 @@ contract AnimaguSwap {
         require(recipient != address(0), "Transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
 
-        // Transfer the specified amount of the token from the caller to the recipient
         IERC20(tokenAddress).transferFrom(
             msg.sender,
             recipient,
@@ -378,24 +369,18 @@ contract AnimaguSwap {
         );
     }
 
+    bytes16 private constant _HEX_SYMBOLS = "0123456789abcdef";
+
     function bytes32ToHexString(
         bytes32 _bytes32
     ) public pure returns (string memory) {
-        bytes memory byteArray = new bytes(64);
+        bytes memory buffer = new bytes(64);
         for (uint256 i = 0; i < 32; i++) {
-            bytes1 byteValue = _bytes32[i];
-            uint8 singleByte = uint8(byteValue);
-            bytes1 hi = bytes1(singleByte >> 4);
-            bytes1 lo = bytes1(singleByte & 0x0F);
-            byteArray[i * 2] = char(hi);
-            byteArray[i * 2 + 1] = char(lo);
+            uint8 value = uint8(_bytes32[i]);
+            buffer[i * 2] = _HEX_SYMBOLS[value >> 4];
+            buffer[i * 2 + 1] = _HEX_SYMBOLS[value & 0x0F];
         }
-        return string(byteArray);
-    }
-
-    function char(bytes1 b) private pure returns (bytes1 c) {
-        uint8 value = uint8(b);
-        return bytes1(value + (value < 10 ? 0x30 : 0x57));
+        return string(buffer);
     }
 
     function userComplain(
@@ -403,14 +388,7 @@ contract AnimaguSwap {
         string memory signature,
         string memory V,
         string memory W
-    )
-        external
-        payable
-        returns (
-            // bytes32 messageHash
-            bool
-        )
-    {
+    ) external payable {
         string memory concatenatedWV = string.concat(W, V);
         bytes32 computedWV = keccak256(abi.encodePacked(concatenatedWV));
         string memory hexComputedWV = bytes32ToHexString(computedWV);
@@ -430,8 +408,6 @@ contract AnimaguSwap {
         address signer = recover(concatenatedBV, signature);
         // address signer = recover(messageHash, signature);
         require(signer == flipperAddress, "Invalid signature");
-
-        return true;
     }
 
     function recover(
@@ -472,40 +448,38 @@ contract AnimaguSwap {
         }
     }
 
-    function hexToBytes(string memory _hex) public pure returns (bytes memory) {
-        bytes memory strBytes = bytes(_hex);
-        require(strBytes.length % 2 == 0, "Invalid hex string length");
+    function hexToBytes(
+        string memory _hex
+    ) internal pure returns (bytes memory) {
+        // 获取字节长度，而非整个字符串的长度，直接计算结果数组大小
+        uint256 bytesLength = bytes(_hex).length / 2;
+        bytes memory resultBytes = new bytes(bytesLength);
 
-        bytes memory resultBytes = new bytes(strBytes.length / 2);
-        bytes1 char1;
-        bytes1 char2;
+        // 删除额外的变量，直接在循环中处理字符转换
+        for (uint256 i = 0; i < bytesLength; i++) {
+            uint8 highNibble = charToNibble(uint8(bytes(_hex)[2 * i]));
+            uint8 lowNibble = charToNibble(uint8(bytes(_hex)[2 * i + 1]));
 
-        for (uint256 i = 0; i < strBytes.length; i += 2) {
-            char1 = bytes1(strBytes[i]);
-            char2 = bytes1(strBytes[i + 1]);
-            resultBytes[i / 2] = byteFromHexChar(char1, char2);
+            // 直接在这里计算结果，避免调用额外的函数
+            resultBytes[i] = bytes1((highNibble << 4) | lowNibble);
         }
 
         return resultBytes;
     }
 
-    function byteFromHexChar(
-        bytes1 _char1,
-        bytes1 _char2
-    ) internal pure returns (bytes1) {
-        return
-            bytes1(
-                (uint8(fromHexChar(_char1)) << 4) | uint8(fromHexChar(_char2))
-            );
-    }
+    // 合并从字符到nibble的计算，避免多个函数调用
+    function charToNibble(uint8 _char) internal pure returns (uint8 nibble) {
+        // 计算nibble值，合并原来`fromHexChar`的逻辑
+        if (_char >= 48 && _char <= 57) {
+            return _char - 48; // 对于0-9
+        }
+        if (_char >= 65 && _char <= 70) {
+            return _char - 55; // 对于大写A-F
+        }
+        if (_char >= 97 && _char <= 102) {
+            return _char - 87; // 对于小写a-f
+        }
 
-    function fromHexChar(bytes1 _char) internal pure returns (uint8) {
-        uint8 charValue = uint8(_char);
-        require(
-            (charValue >= 48 && charValue <= 57) ||
-                (charValue >= 97 && charValue <= 102),
-            "Invalid hex char"
-        );
-        return charValue - (charValue < 58 ? 48 : 87);
+        revert("Invalid hex char"); // 输入不是有效的十六进制字符
     }
 }

@@ -211,15 +211,10 @@ describe("AnimaguSwap", function () {
             ["string"],
             [decryptedMessage],
         )
-        // const sig = ethers.splitSignature(signedCommitment)
-
-        // 接着，我们可以用恢复函数来找出签名者的地址
         const signerAddress = ethers.recoverAddress(
             decryptedMessageHash,
             signedCommitment,
         )
-        // console.log("签名者的地址是:", signerAddress)
-        // console.log("flipper address", flipperWallet.address)
 
         const verifySignatureResult = await verifySignature(
             signedCommitment,
@@ -234,7 +229,6 @@ describe("AnimaguSwap", function () {
             console.log("shares:", shares)
             const tree = new MerkleTree(shares, keccak256, { sort: true })
             const root = "0x" + tree.getRoot().toString("hex")
-            // Create an array for each staker, containing their share and its corresponding Merkle proof
             const stakerData = stakers.map((staker, index) => {
                 const proof = tree.getHexProof(shares[index])
                 return {
