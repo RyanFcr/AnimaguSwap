@@ -207,6 +207,20 @@ describe("AnimaguSwap", function () {
             flipperWallet,
             decryptedMessage,
         )
+        const decryptedMessageHash = ethers.solidityPackedKeccak256(
+            ["string"],
+            [decryptedMessage],
+        )
+        // const sig = ethers.splitSignature(signedCommitment)
+
+        // 接着，我们可以用恢复函数来找出签名者的地址
+        const signerAddress = ethers.recoverAddress(
+            decryptedMessageHash,
+            signedCommitment,
+        )
+        // console.log("签名者的地址是:", signerAddress)
+        // console.log("flipper address", flipperWallet.address)
+
         const verifySignatureResult = await verifySignature(
             signedCommitment,
             decryptedMessage,
@@ -345,7 +359,7 @@ describe("AnimaguSwap", function () {
                 ) {
                     animaguSwap
                         .connect(recoveredSignerWBTCHolder)
-                        .transferTokenToAddress(
+                        .transactionF(
                             daiAddress,
                             flipperWallet.address,
                             DAIBalanceAfter - DAIBalanceBefore - idealAmount,
@@ -359,7 +373,7 @@ describe("AnimaguSwap", function () {
                 ) {
                     animaguSwap
                         .connect(recoveredSignerWBTCHolder)
-                        .transferTokenToAddress(
+                        .transactionF(
                             wBtcAddress,
                             flipperWallet.address,
                             wBtcBalanceAfter - wBtcBalanceBefore - idealAmount,
@@ -372,7 +386,7 @@ describe("AnimaguSwap", function () {
             await animaguSwap
                 .connect(recoveredSignerWBTCHolder)
                 .userComplain(
-                    flipperWallet.address,
+                    signerAddress,
                     signedCommitment.slice(2),
                     V.toString(),
                     W.toString(),

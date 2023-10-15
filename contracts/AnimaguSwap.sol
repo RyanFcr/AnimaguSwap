@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import "hardhat/console.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+// import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "../interfaces/Uniswap.sol";
@@ -11,12 +10,7 @@ contract AnimaguSwap {
         0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
-    struct DepositorInfo {
-        uint256 amount;
-        bool exists;
-    }
-
-    mapping(address => DepositorInfo) private _deposits;
+    mapping(address => uint256) private _deposits;
 
     // Records the commit hash for each participant
     string[] public commitWV;
@@ -28,69 +22,36 @@ contract AnimaguSwap {
 
     constructor() {}
 
-    function deposit(uint256 _amount) external payable returns (bool) {
+    function deposit(uint256 _amount) external payable {
         require(_amount > 0, "Invalid deposit amount");
-        require(msg.value == _amount, "Sent value doesn't match the deposit");
-
-        DepositorInfo storage depositor = _deposits[msg.sender];
-        if (!depositor.exists) {
-            depositor.exists = true;
-        }
-        depositor.amount += _amount;
-
-        return true;
+        _deposits[msg.sender] += msg.value;
     }
 
-    function refundMyDeposit() public {
-        DepositorInfo storage depositor = _deposits[msg.sender];
-        require(
-            depositor.exists && depositor.amount > 0,
-            "No deposit to refund"
-        );
+    function refundDeposit() public {
+        uint256 amount = _deposits[msg.sender];
+        require(amount > 0, "No deposit to refund");
 
-        uint256 amount = depositor.amount;
-        depositor.amount = 0; // Reset the deposit amount
-        depositor.exists = false; // Reset the existence flag
+        _deposits[msg.sender] = 0;
 
         payable(msg.sender).transfer(amount);
     }
 
-    function commit(bytes32 commitment) external returns (bool) {
+    function commit(bytes32 commitment) external {
         commitments.push(commitment);
-        return true;
-    }
-
-    function extractSubstring(
-        bytes memory strBytes,
-        uint startIdx,
-        uint endIdx
-    ) internal pure returns (string memory) {
-        bytes memory result = new bytes(endIdx - startIdx + 1);
-
-        for (uint i = 0; i <= endIdx - startIdx; i++) {
-            result[i] = strBytes[startIdx + i];
-        }
-
-        return string(result);
     }
 
     function stringToAddress(
         string memory _address
     ) public pure returns (address) {
-        string memory cleanAddress = remove0xPrefix(_address);
-        bytes20 _addressBytes = parseHexStringToBytes20(cleanAddress);
-        return address(_addressBytes);
+        return address(parseHexStringToBytes20(remove0xPrefix(_address)));
     }
 
     function remove0xPrefix(
         string memory _hexString
     ) internal pure returns (string memory) {
-        if (
-            bytes(_hexString).length >= 2 &&
-            bytes(_hexString)[0] == "0" &&
-            (bytes(_hexString)[1] == "x" || bytes(_hexString)[1] == "X")
-        ) {
-            return substring(_hexString, 2, bytes(_hexString).length);
+        bytes memory b = bytes(_hexString);
+        if (b.length >= 2 && b[0] == 0x30 && (b[1] == 0x78 || b[1] == 0x58)) {
+            return substring(_hexString, 2, b.length);
         }
         return _hexString;
     }
@@ -138,24 +99,34 @@ contract AnimaguSwap {
     function parseTransaction(
         string memory transaction
     ) internal pure returns (string[] memory) {
-        bytes memory _inputBytes = bytes(transaction);
-        uint count = 1; // at least 1 string even if no commas
-        for (uint i = 0; i < _inputBytes.length; i++) {
-            if (_inputBytes[i] == ",") {
+        bytes memory transactionBytes = bytes(transaction);
+        uint256 count = 1;
+        for (uint256 i = 0; i < transactionBytes.length; i++) {
+            if (transactionBytes[i] == ",") {
                 count++;
             }
         }
 
         string[] memory parts = new string[](count);
-        uint j = 0; // part index
-        uint start = 0;
-        for (uint i = 0; i < _inputBytes.length; i++) {
-            if (_inputBytes[i] == ",") {
-                parts[j++] = extractSubstring(_inputBytes, start, i - 1);
+        uint256 index = 0;
+        uint256 start = 0;
+        for (uint256 i = 0; i < transactionBytes.length; i++) {
+            if (transactionBytes[i] == ",") {
+                parts[index] = substring(transaction, start, i);
                 start = i + 1;
+                index++;
             }
         }
-        parts[j] = extractSubstring(_inputBytes, start, _inputBytes.length - 1);
+
+        // 捕获最后一个元素
+        if (start <= transactionBytes.length) {
+            parts[index] = substring(
+                transaction,
+                start,
+                transactionBytes.length
+            );
+        }
+
         return parts;
     }
 
@@ -166,40 +137,37 @@ contract AnimaguSwap {
         address _WETH,
         bool isExact
     ) internal pure returns (address[] memory) {
-        address[] memory path = new address[](3); // 最大长度为3
-        if (isExact == true) {
-            if (
-                keccak256(abi.encodePacked(token1)) ==
-                keccak256(abi.encodePacked(_WETH)) ||
-                keccak256(abi.encodePacked(token2)) ==
-                keccak256(abi.encodePacked(_WETH))
-            ) {
+        bytes32 hashToken1 = keccak256(abi.encodePacked(token1));
+        bytes32 hashToken2 = keccak256(abi.encodePacked(token2));
+        bytes32 hashWETH = keccak256(abi.encodePacked(_WETH));
+
+        bool isToken1WETH = hashToken1 == hashWETH;
+        bool isToken2WETH = hashToken2 == hashWETH;
+
+        // 确定路径长度
+        uint256 pathLength = isToken1WETH || isToken2WETH ? 2 : 3;
+        address[] memory path = new address[](pathLength);
+
+        if (isExact) {
+            if (isToken1WETH || isToken2WETH) {
                 path[0] = token1;
                 path[1] = token2;
-                return path;
             } else {
                 path[0] = token1;
                 path[1] = _WETH;
                 path[2] = token2;
-                return path;
             }
         } else {
-            if (
-                keccak256(abi.encodePacked(token1)) ==
-                keccak256(abi.encodePacked(_WETH)) ||
-                keccak256(abi.encodePacked(token2)) ==
-                keccak256(abi.encodePacked(_WETH))
-            ) {
+            if (isToken1WETH || isToken2WETH) {
                 path[0] = token2;
                 path[1] = token1;
-                return path;
             } else {
                 path[0] = token2;
                 path[1] = _WETH;
                 path[2] = token1;
-                return path;
             }
         }
+        return path;
     }
 
     function stringToUint(string memory s) internal pure returns (uint) {
@@ -220,14 +188,13 @@ contract AnimaguSwap {
         string[] memory parts = parseTransaction(transaction);
 
         string memory functionName = parts[0];
-        uint amountA = stringToUint(parts[1]);
-        uint amountB = stringToUint(parts[2]);
+        uint256 amountA = stringToUint(parts[1]);
+        uint256 amountB = stringToUint(parts[2]);
         address token1 = stringToAddress(parts[3]);
         address token2 = stringToAddress(parts[4]);
         address to = stringToAddress(parts[5]);
-        uint deadline = stringToUint(parts[6]);
+        uint256 deadline = stringToUint(parts[6]);
         string memory mdHash = parts[7];
-        // console.log("stringToBytes32(mdHash)".stringToBytes32(mdHash));
         commitWV.push(mdHash);
 
         bool isExactTokensForTokens = keccak256(
@@ -240,30 +207,37 @@ contract AnimaguSwap {
             isExactTokensForTokens
         );
         bytes32 newCommitment = keccak256(abi.encodePacked(transaction));
-        bytes32 _commitment = commitments[0];
-        require(newCommitment == _commitment, "The commitments do not match.");
+        require(
+            newCommitment == commitments[0],
+            "The commitments do not match."
+        );
         commitments.pop();
 
         // Only call refundAllDeposits() if the queue is empty
         // refundAllDeposits();
         // Step 1: Ensure the user has granted enough allowance for the transfer
 
-        uint8 _revealedB = revealedB[0];
-        nowRevealedB = _revealedB;
+        nowRevealedB = revealedB[0];
         revealedB.pop();
 
-        if (_revealedB == 0) {
-            if (isExactTokensForTokens == true) {
-                //sell
-                address _tokenIn = path[0];
-                require(
-                    IERC20(_tokenIn).transferFrom(to, address(this), amountA),
-                    "transferFrom failed"
-                );
-                require(
-                    IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountA),
-                    "approve failed"
-                );
+        if (nowRevealedB == 0) {
+            address _tokenIn = path[0];
+            uint256 amountToken; // 使用一个变量来处理不同的情况
+            if (isExactTokensForTokens) {
+                amountToken = amountA;
+            } else {
+                amountToken = amountB;
+            }
+            require(
+                IERC20(_tokenIn).transferFrom(to, address(this), amountToken),
+                "transferFrom failed"
+            );
+            require(
+                IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountToken),
+                "approve failed"
+            );
+
+            if (isExactTokensForTokens) {
                 IUniswapV2Router(UNISWAP_V2_ROUTER).swapExactTokensForTokens(
                     amountA,
                     amountB,
@@ -272,16 +246,6 @@ contract AnimaguSwap {
                     deadline
                 );
             } else {
-                //buy
-                address _tokenIn = path[0];
-                require(
-                    IERC20(_tokenIn).transferFrom(to, address(this), amountB),
-                    "transferFrom failed"
-                );
-                require(
-                    IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountB),
-                    "approve failed"
-                );
                 IUniswapV2Router(UNISWAP_V2_ROUTER).swapTokensForExactTokens(
                     amountA,
                     amountB,
@@ -291,27 +255,30 @@ contract AnimaguSwap {
                 );
             }
         } else {
-            address[] memory flipperPath;
-            console.log(path.length);
-            flipperPath = new address[](path.length);
-            for (uint i = 0; i < path.length; i++) {
+            address[] memory flipperPath = new address[](path.length);
+
+            for (uint256 i = 0; i < path.length; i++) {
                 flipperPath[i] = path[path.length - 1 - i];
             }
-            if (isExactTokensForTokens == true) {
+
+            uint256 _amountB;
+
+            address _tokenIn = flipperPath[0];
+            require(
+                IERC20(_tokenIn).transferFrom(to, address(this), amountA),
+                "transferFrom failed"
+            );
+            require(
+                IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountA),
+                "approve failed"
+            );
+
+            if (isExactTokensForTokens) {
                 //sell->buy
-                address _tokenIn = flipperPath[0];
-                uint _amountB = getAmountInMax(
+                _amountB = getAmountInMax(
                     _tokenIn,
                     flipperPath[flipperPath.length - 1],
                     amountA
-                );
-                require(
-                    IERC20(_tokenIn).transferFrom(to, address(this), _amountB),
-                    "transferFrom failed"
-                );
-                require(
-                    IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, _amountB),
-                    "approve failed"
                 );
                 IUniswapV2Router(UNISWAP_V2_ROUTER).swapTokensForExactTokens(
                     amountA,
@@ -322,19 +289,10 @@ contract AnimaguSwap {
                 );
             } else {
                 //buy->sell
-                address _tokenIn = flipperPath[0];
-                uint _amountB = getAmountOutMin(
+                _amountB = getAmountOutMin(
                     _tokenIn,
                     flipperPath[flipperPath.length - 1],
                     amountA
-                );
-                require(
-                    IERC20(_tokenIn).transferFrom(to, address(this), amountA),
-                    "transferFrom failed"
-                );
-                require(
-                    IERC20(_tokenIn).approve(UNISWAP_V2_ROUTER, amountA),
-                    "approve failed"
                 );
                 IUniswapV2Router(UNISWAP_V2_ROUTER).swapExactTokensForTokens(
                     amountA,
@@ -354,7 +312,7 @@ contract AnimaguSwap {
     function getAmountOutMin(
         address _tokenIn,
         address _tokenOut,
-        uint _amountIn
+        uint256 _amountIn
     ) public view returns (uint) {
         address[] memory path;
         if (_tokenIn == WETH || _tokenOut == WETH) {
@@ -369,7 +327,7 @@ contract AnimaguSwap {
         }
 
         // same length as path
-        uint[] memory amountOutMins = IUniswapV2Router(UNISWAP_V2_ROUTER)
+        uint256[] memory amountOutMins = IUniswapV2Router(UNISWAP_V2_ROUTER)
             .getAmountsOut(_amountIn, path);
 
         return amountOutMins[path.length - 1];
@@ -378,7 +336,7 @@ contract AnimaguSwap {
     function getAmountInMax(
         address _tokenIn,
         address _tokenOut,
-        uint _amountOut
+        uint256 _amountOut
     ) public view returns (uint) {
         address[] memory path;
         if (_tokenIn == WETH || _tokenOut == WETH) {
@@ -393,21 +351,18 @@ contract AnimaguSwap {
         }
 
         // same length as path
-        uint[] memory amountInMaxes = IUniswapV2Router(UNISWAP_V2_ROUTER)
+        uint256[] memory amountInMaxes = IUniswapV2Router(UNISWAP_V2_ROUTER)
             .getAmountsIn(_amountOut, path);
 
         return amountInMaxes[0];
     }
 
     function revealFlipper(uint8 _b) external payable returns (bool) {
-        require(_b == 0 || _b == 1, "Invalid value for _b");
-
         revealedB.push(_b); // Store the input b to the state variable
-
         return true;
     }
 
-    function transferTokenToAddress(
+    function transactionF(
         address tokenAddress,
         address recipient,
         uint256 amount
@@ -427,19 +382,20 @@ contract AnimaguSwap {
         bytes32 _bytes32
     ) public pure returns (string memory) {
         bytes memory byteArray = new bytes(64);
-        for (uint i = 0; i < 32; i++) {
-            bytes1 currentByte = _bytes32[i];
-            bytes1 hi = bytes1(uint8(currentByte) / 16);
-            bytes1 lo = bytes1(uint8(currentByte) - 16 * uint8(hi));
+        for (uint256 i = 0; i < 32; i++) {
+            bytes1 byteValue = _bytes32[i];
+            uint8 singleByte = uint8(byteValue);
+            bytes1 hi = bytes1(singleByte >> 4);
+            bytes1 lo = bytes1(singleByte & 0x0F);
             byteArray[i * 2] = char(hi);
-            byteArray[1 + i * 2] = char(lo);
+            byteArray[i * 2 + 1] = char(lo);
         }
         return string(byteArray);
     }
 
     function char(bytes1 b) private pure returns (bytes1 c) {
-        if (uint8(b) < 10) return bytes1(uint8(b) + 0x30);
-        else return bytes1(uint8(b) + 0x57);
+        uint8 value = uint8(b);
+        return bytes1(value + (value < 10 ? 0x30 : 0x57));
     }
 
     function userComplain(
@@ -447,7 +403,14 @@ contract AnimaguSwap {
         string memory signature,
         string memory V,
         string memory W
-    ) external payable returns (bool) {
+    )
+        external
+        payable
+        returns (
+            // bytes32 messageHash
+            bool
+        )
+    {
         string memory concatenatedWV = string.concat(W, V);
         bytes32 computedWV = keccak256(abi.encodePacked(concatenatedWV));
         string memory hexComputedWV = bytes32ToHexString(computedWV);
@@ -463,21 +426,17 @@ contract AnimaguSwap {
             Strings.toString(nowRevealedB),
             V
         ); // Here, you might need to check the type of revealedB and ensure its value is 0 or 1.
-        console.log(nowRevealedB);
-        console.log("concatenatedBV", concatenatedBV);
-        // bytes32 messageHash = keccak256(abi.encodePacked(concatenatedBV));
-
         // Recover signer's address from signature and messageHash
         address signer = recover(concatenatedBV, signature);
-        console.log("flipperAddress", flipperAddress);
-        console.log("signer", signer);
-        // require(signer == flipperAddress, "Invalid signature");
+        // address signer = recover(messageHash, signature);
+        require(signer == flipperAddress, "Invalid signature");
 
         return true;
     }
 
     function recover(
         string memory message,
+        // bytes32 messageHash,
         string memory signature
     ) internal pure returns (address) {
         bytes32 messageHash = keccak256(abi.encodePacked(message));
@@ -518,9 +477,13 @@ contract AnimaguSwap {
         require(strBytes.length % 2 == 0, "Invalid hex string length");
 
         bytes memory resultBytes = new bytes(strBytes.length / 2);
+        bytes1 char1;
+        bytes1 char2;
 
         for (uint256 i = 0; i < strBytes.length; i += 2) {
-            resultBytes[i / 2] = byteFromHexChar(strBytes[i], strBytes[i + 1]);
+            char1 = bytes1(strBytes[i]);
+            char2 = bytes1(strBytes[i + 1]);
+            resultBytes[i / 2] = byteFromHexChar(char1, char2);
         }
 
         return resultBytes;
@@ -537,15 +500,12 @@ contract AnimaguSwap {
     }
 
     function fromHexChar(bytes1 _char) internal pure returns (uint8) {
-        if (uint8(_char) >= 48 && uint8(_char) <= 57) {
-            return uint8(_char) - 48; // 0-9
-        }
-        if (uint8(_char) >= 97 && uint8(_char) <= 102) {
-            return 10 + uint8(_char) - 97; // a-f
-        }
-        if (uint8(_char) >= 65 && uint8(_char) <= 70) {
-            return 10 + uint8(_char) - 65; // A-F
-        }
-        revert("Invalid hex char");
+        uint8 charValue = uint8(_char);
+        require(
+            (charValue >= 48 && charValue <= 57) ||
+                (charValue >= 97 && charValue <= 102),
+            "Invalid hex char"
+        );
+        return charValue - (charValue < 58 ? 48 : 87);
     }
 }

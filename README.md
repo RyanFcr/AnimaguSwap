@@ -24,7 +24,7 @@
 **Generate Transaction：**
 
 - 「Off Chain」B = randomBit()
-- 「Off Chain」Tx' = if(B==0)?tx:~tx; Here tx is TransactionRequest
+- 「Off Chain」Tx' = if(B==0)?tx:~tx
   - ~tx = tx == BUY? SELL;BUY
 - 「Off Chain」W = randomBit(); W is designed so that anyone in possession of W can verify the flipper, allowing for the slashing of the flipper.
 - 「Off Chain」V = randomBit(): The design of V is to prevent flipper cheats, ensuring that the flipper cannot send an identical signed message to the stakers.
