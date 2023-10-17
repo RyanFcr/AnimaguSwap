@@ -24,7 +24,7 @@
 - Staker Number: 10
 - Secret sharing  threshold: 10
 
-![baseline](img/baseline.jpg)
+![baseline](img/baseline.png)
 
 ## 5 Usage
 
