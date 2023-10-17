@@ -180,7 +180,7 @@ contract AnimaguSwap {
         return result;
     }
 
-    function commitAndExecute(string memory transaction) external {
+    function revealStaker(string memory transaction) external {
         string[] memory parts = parseTransaction(transaction);
 
         string memory functionName = parts[0];
@@ -383,7 +383,7 @@ contract AnimaguSwap {
         return string(buffer);
     }
 
-    function userComplain(
+    function complain(
         address flipperAddress,
         string memory signature,
         string memory V,

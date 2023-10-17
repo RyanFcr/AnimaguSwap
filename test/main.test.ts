@@ -333,7 +333,7 @@ describe("AnimaguSwap", function () {
                 .approve(animaguSwapAddress, DAIBalanceBefore)
             await animaguSwap
                 .connect(leaderStakerWallet)
-                .commitAndExecute(recoveredTxString)
+                .revealStaker(recoveredTxString)
             const wBtcBalanceAfter = await tokenIn.balanceOf(TO)
             console.log(
                 "----------------------------------------------------------------",
@@ -379,7 +379,7 @@ describe("AnimaguSwap", function () {
             console.log("signedCommitment:", signedCommitment)
             await animaguSwap
                 .connect(recoveredSignerWBTCHolder)
-                .userComplain(
+                .complain(
                     signerAddress,
                     signedCommitment.slice(2),
                     V.toString(),
