@@ -14,7 +14,7 @@ let SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
 let PRIVATE_KEY = process.env.PRIVATE_KEY || ""
 let ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || ""
 let COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY || ""
-let ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || ""
+let ALCHEMY_RPC_URL = process.env.ALCHEMY_RPC_URL || ""
 
 const config: HardhatUserConfig = {
     defaultNetwork: "hardhat",
@@ -36,7 +36,7 @@ const config: HardhatUserConfig = {
     networks: {
         hardhat: {
             forking: {
-                url: ALCHEMY_API_KEY,
+                url: ALCHEMY_RPC_URL,
             },
         },
         sepolia: {

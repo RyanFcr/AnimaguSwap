@@ -26,7 +26,7 @@
 ![baseline](img/baseline.png)
 
 ## 5 Usage
-
+### Mac M1
 1. yarn install & fill up .env file
 2. yarn deploy
 3. npx hardhat test
