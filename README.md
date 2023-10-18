@@ -8,7 +8,6 @@
 
 - Fork from the ETH Mainnet
 
-- Github: https://github.com/RyanFcr/AnimaguSwap
 ## 3 Project Limitation
 - Instead of genuinely simulating N nodes locally, I emulate N wallet accounts using local variables.
 
