@@ -175,7 +175,7 @@ describe("AnimaguSwap", function () {
         }
 
         console.log("txb", txb)
-        const commitment = ethers.solidityPackedKeccak256(["string"], [txb])
+        const commitment = ethers.solidityPackedKeccak256(["bytes"], [txb])
         console.log("commitment:", commitment) //hex
         // Stage2: transaction submission
 
@@ -381,7 +381,7 @@ describe("AnimaguSwap", function () {
                 .connect(recoveredSignerWBTCHolder)
                 .complain(
                     signerAddress,
-                    signedCommitment.slice(2),
+                    signedCommitment,
                     V.toString(),
                     W.toString(),
                 )

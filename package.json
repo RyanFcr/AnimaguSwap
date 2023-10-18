@@ -34,6 +34,8 @@
     "deploy": "yarn hardhat run  scripts/deployAnimaguSwap.ts --network sepolia"
   },
   "dependencies": {
+    "@ensdomains/dnssec-oracle": "^0.2.0",
+    "@ensdomains/ens-contracts": "^0.0.22",
     "@openzeppelin/contracts": "4.9.2",
     "@uniswap/v2-periphery": "^1.1.0-beta.0",
     "eccrypto": "^1.1.6",
