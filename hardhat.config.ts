@@ -14,7 +14,7 @@ let SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
 let PRIVATE_KEY = process.env.PRIVATE_KEY || ""
 let ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || ""
 let COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY || ""
-let ALCHEMY_RPC_URL = process.env.ALCHEMY_RPC_URL || ""
+let ETHMAINNET_RPC_URL = process.env.ETHMAINNET_RPC_URL || ""
 
 const config: HardhatUserConfig = {
     defaultNetwork: "hardhat",
@@ -36,7 +36,7 @@ const config: HardhatUserConfig = {
     networks: {
         hardhat: {
             forking: {
-                url: ALCHEMY_RPC_URL,
+                url: ETHMAINNET_RPC_URL,
             },
         },
         sepolia: {
@@ -45,15 +45,12 @@ const config: HardhatUserConfig = {
             chainId: 11155111,
         },
     },
-    etherscan: {
-        apiKey: ETHERSCAN_API_KEY,
-    },
     gasReporter: {
         enabled: true,
         outputFile: "gas-report.txt",
         noColors: true,
         currency: "USD",
-        coinmarketcap: "b8043906-b8af-4099-8d97-81f9c7e69030",
+        coinmarketcap: COINMARKETCAP_API_KEY,
         token: "ETH",
         showMethodSig: true,
         gasPrice: 21,

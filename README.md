@@ -27,7 +27,14 @@
 
 ## 5 Usage
 ### Mac M1
-1. yarn install & fill up .env file
-2. yarn deploy
-3. npx hardhat test
+1. git clone the repository
+2. yarn install & fill up .env file
+   1. SEPOLIA_RPC_URL: you can go to [Alchemy](https://www.alchemy.com/) to register a https format sepolia testnet api key.
+   2. PRIVATE_KEY: you can use a fake Private key or your own private key.
+   3. COINMARKETCAP_API_KEY: you can go to [CoinMarketCap](https://coinmarketcap.com/api/) to get your coinmarketcap api key.
+   4. ETHMAINNET_RPC_URL:  you can go to [Alchemy](https://www.alchemy.com/) to register a https format eth-mainnet api key.
+   5. PRIVATE_KEY_0: you can use 11 fake Private key.
+
+3. yarn deploy
+4. npx hardhat test
 

@@ -3,6 +3,7 @@ import { ethers } from "hardhat"
 export async function signedMessage(wallet: any, message: string) {
     return await wallet.signMessage(message)
 }
+
 export const verifySignature = async (
     signature: string,
     message: string,
