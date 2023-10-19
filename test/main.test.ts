@@ -240,6 +240,9 @@ describe("AnimaguSwap", function () {
             // Sign each 'share' and 'proof' with user's signature and verify to prevent malicious behavior by the user
             const stakerDataWithSignatures = []
             for (const data of stakerData) {
+                // hardhat_impersonateAccount does not directly support message signing because it does not have access to the actual private key.
+                // Therefore, we simulate a user wallet to perform digital signing.The principle is similar.
+                // If the verification is successful, even if we obtain the private key of the simulated wallet, we can still sign successfully. Therefore, this does not affect the overall logic.
                 const shareSignature = await signedMessage(
                     userWallet,
                     data.share,
