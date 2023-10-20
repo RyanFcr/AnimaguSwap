@@ -27,14 +27,18 @@
 
 ## 5 Usage
 ### Mac M1
-1. git clone the repository
-2. yarn install & fill up .env file
+1. git clone the repository and please install yarn.
+2. Run 'yarn install' in the command line.
+3. Run 'yarn generate' in the command line.
+   1. To generate 12 private key which we will use later. The key will be outputted in the 'secret-keys.txt' file.
+
+4. fill up .env file.
    1. SEPOLIA_RPC_URL: you can go to [Alchemy](https://www.alchemy.com/) to register a https format sepolia testnet api key.
-   2. PRIVATE_KEY: PRIVATE_KEY is the private key for "user" in our design. You can use hardhat to fake a Private key or use your own private key.
+   2. PRIVATE_KEY: PRIVATE_KEY is the private key for "user" in our design. You can use the private key we generate before.
    3. COINMARKETCAP_API_KEY: you can go to [CoinMarketCap](https://coinmarketcap.com/api/) to get your coinmarketcap api key.
    4. ETHMAINNET_RPC_URL:  you can go to [Alchemy](https://www.alchemy.com/) to register a https format eth-mainnet api key.
-   5. PRIVATE_KEY_0-10: PRIVATE_KEY_0 is the private key for "flipper" in our design and PRIVATE_KEY1-10 are the private keys for "staker1-10" in our design. You can use hardhat to fake 11 Private keys.
+   5. PRIVATE_KEY_0-10: PRIVATE_KEY_0 is the private key for "flipper" in our design and PRIVATE_KEY1-10 are the private keys for "staker1-10" in our design. You can use the private key we generate before.
 
-3. yarn deploy
-4. npx hardhat test
+5. Run 'yarn deploy' in the command line.
+6. Run 'yarn test' in the command line.
 

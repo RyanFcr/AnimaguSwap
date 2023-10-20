@@ -31,7 +31,9 @@
     "typescript": "^5.2.2"
   },
   "scripts": {
-    "deploy": "yarn hardhat run  scripts/deployAnimaguSwap.ts --network sepolia"
+    "deploy": "yarn hardhat run  scripts/deployAnimaguSwap.ts --network sepolia",
+    "generate":"npx ts-node scripts/randomKeyGenerator.ts",
+    "test":"npx hardhat test"
   },
   "dependencies": {
     "@ensdomains/dnssec-oracle": "^0.2.0",

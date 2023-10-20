@@ -12,7 +12,6 @@ import "@typechain/hardhat"
 
 let SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || ""
 let PRIVATE_KEY = process.env.PRIVATE_KEY || ""
-let ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || ""
 let COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY || ""
 let ETHMAINNET_RPC_URL = process.env.ETHMAINNET_RPC_URL || ""
 

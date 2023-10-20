@@ -4,6 +4,7 @@ coverage
 coverage.json
 typechain
 typechain-types
+secret-keys.txt
 
 # Hardhat files
 cache
